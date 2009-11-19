@@ -62,6 +62,8 @@ T1SearchPath =  (
                 '/usr/local/Acrobat6/Resource/Font',    #Linux, Acrobat 5?
                 '/usr/local/Acrobat5/Resource/Font',    #Linux, Acrobat 5?
                 '/usr/local/Acrobat4/Resource/Font',    #Linux, Acrobat 4
+                '/opt/Adobe/Reader9/Resource/Font/',    #Linux, Acrobat 9
+                '/usr/share/fonts/type1',               #Linux, Debian
                 '%(REPORTLAB_DIR)s/fonts',              #special
                 '%(REPORTLAB_DIR)s/../fonts',           #special
                 '%(REPORTLAB_DIR)s/../../fonts',        #special
@@ -73,6 +75,7 @@ TTFSearchPath = (
                 'c:/winnt/fonts',
                 'c:/windows/fonts',
                 '/usr/lib/X11/fonts/TrueType/',
+                '/usr/share/fonts/truetype',    #Linux, Debian
                 '%(REPORTLAB_DIR)s/fonts',      #special
                 '%(REPORTLAB_DIR)s/../fonts',   #special
                 '%(REPORTLAB_DIR)s/../../fonts',#special
@@ -100,6 +103,8 @@ CMapSearchPath = (
                   '/usr/local/Acrobat6/Resource/CMap',
                   '/usr/local/Acrobat5/Resource/CMap',
                   '/usr/local/Acrobat4/Resource/CMap',
+                  '/opt/Adobe/Reader9/Resource/CMap/',  #Linux, Acrobat 9
+                  '/usr/share/fonts/cmap',              #Linux, Debian
                   'C:\\Program Files\\Adobe\\Acrobat\\Resource\\CMap',
                   'C:\\Program Files\\Adobe\\Acrobat 9.0\\Resource\\CMap',
                   'C:\\Program Files\\Adobe\\Acrobat 8.0\\Resource\\CMap',
