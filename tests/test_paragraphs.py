@@ -160,6 +160,114 @@ class ParagraphTestCase(unittest.TestCase):
                                      showBoundary=1)
         template.build(story,
             onFirstPage=myFirstPage, onLaterPages=myLaterPages)
+    
+    def testRTL(self):
+        def registerFont(filename):
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase import ttfonts
+            from reportlab.lib.fonts import addMapping
+        
+            face = ttfonts.TTFontFace(filename)
+            pdfmetrics.registerFont(ttfonts.TTFont(face.name, filename, asciiReadable=0))
+            addMapping(face.familyName, face.bold, face.italic, face.name)
+
+        # register a font that supports most Unicode characters
+        import os
+        fontDir = 'ttf-dejavu'
+        fontName = 'DejaVuSans'
+        registerFont(os.path.join('/usr/share/fonts/truetype/', fontDir, fontName + '.ttf'))
+
+        # create styles based on the registered font
+        from reportlab.lib.enums import TA_LEFT, TA_RIGHT
+        styLTR = ParagraphStyle('left', fontName = fontName, alignment = TA_LEFT)
+        styRTL = ParagraphStyle('right', parent=styLTR, alignment = TA_RIGHT)
+
+        # strings for testing LTR.
+        ltrStrings = [# English with Arabic in the middle
+                      'English with \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a in the middle.',
+                      # English symbols (!@#$%^&*) Arabic
+                      'English symbols (!@#$%^&*) \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a.',
+                      # ((testing integers in LTR)) 
+                      '123 LTR 123 Integers 123.',
+                      # ((testing decimals in LTR))
+                      '456.78 LTR 456.78 Decimals 456.78.',
+                      # Long English text with RTL script in the middle, splitting over multiple lines
+                      'Long \xd8\xb7\xd9\x88\xd9\x8a\xd9\x84 English text'
+                          ' \xd9\x86\xd8\xb5 \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a with RTL script'
+                          ' \xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8\xd8\xa9 \xd9\x85\xd9\x86'
+                          ' \xd8\xa7\xd9\x84\xd9\x8a\xd9\x85\xd9\x8a\xd9\x86 \xd8\xa5\xd9\x84\xd9\x89'
+                          ' \xd8\xa7\xd9\x84\xd9\x8a\xd8\xb3\xd8\xa7\xd8\xb1 in the middle,'
+                          ' \xd9\x81\xd9\x8a \xd8\xa7\xd9\x84\xd9\x88\xd8\xb3\xd8\xb7\xd8\x8c'
+                          ' splitting \xd9\x85\xd9\x82\xd8\xb3\xd9\x85 over \xd8\xb9\xd9\x84\xd9\x89'
+                          ' multiple lines \xd8\xb9\xd8\xaf\xd8\xa9 \xd8\xb3\xd8\xb7\xd9\x88\xd8\xb1.',
+                      ]
+
+        # strings for testing RTL
+        rtlStrings = [# Arabic with English in the middle
+                      '\xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a \xd9\x85\xd8\xb9 English \xd9\x81\xd9\x8a'
+                          ' \xd8\xa7\xd9\x84\xd9\x85\xd9\x86\xd8\xaa\xd8\xb5\xd9\x81.',
+                      # Arabic symbols (!@##$%^&*) English
+                      '\xd8\xb1\xd9\x85\xd9\x88\xd8\xb2 \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a\xd8\xa9'
+                          ' (!@#$%^&*) English.',
+                      # 123 from right to left 123 integer numbers 123. ((testing integers in RTL))
+                      '123 \xd9\x85\xd9\x86 \xd8\xa7\xd9\x84\xd9\x8a\xd9\x85\xd9\x8a\xd9\x86'
+                          ' \xd8\xa5\xd9\x84\xd9\x89 \xd8\xa7\xd9\x84\xd9\x8a\xd8\xb3\xd8\xa7\xd8\xb1'
+                          ' 123 \xd8\xa3\xd8\xb1\xd9\x82\xd8\xa7\xd9\x85'
+                          ' \xd8\xb5\xd8\xad\xd9\x8a\xd8\xad\xd8\xa9 123.',
+                      # 456.78 from right to left 456.78 decimal numbers 456.78. ((testing decimals in RTL))
+                      '456.78 \xd9\x85\xd9\x86 \xd8\xa7\xd9\x84\xd9\x8a\xd9\x85\xd9\x8a\xd9\x86'
+                          ' \xd8\xa5\xd9\x84\xd9\x89 \xd8\xa7\xd9\x84\xd9\x8a\xd8\xb3\xd8\xa7\xd8\xb1'
+                          ' 456.78 \xd8\xa3\xd8\xb1\xd9\x82\xd8\xa7\xd9\x85'
+                          ' \xd8\xb9\xd8\xb4\xd8\xb1\xd9\x8a\xd8\xa9 456.78.',
+                      # Long Arabic text with LTR script in the middle, splitting over multiple lines
+                      '\xd9\x86\xd8\xb5 \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a \xd8\xb7\xd9\x88\xd9\x8a\xd9\x84'
+                          ' Long Arabic text \xd9\x85\xd8\xb9 with \xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8\xd8\xa9'
+                          ' \xd9\x85\xd9\x86 \xd8\xa7\xd9\x84\xd9\x8a\xd8\xb3\xd8\xa7\xd8\xb1'
+                          ' \xd8\xa5\xd9\x84\xd9\x89 \xd8\xa7\xd9\x84\xd9\x8a\xd9\x85\xd9\x8a\xd9\x86'
+                          ' LTR script \xd9\x81\xd9\x8a \xd8\xa7\xd9\x84\xd9\x88\xd8\xb3\xd8\xb7\xd8\x8c'
+                          ' in the middle, \xd9\x85\xd9\x82\xd8\xb3\xd9\x85 splitted'
+                          ' \xd8\xb9\xd9\x84\xd9\x89 over \xd8\xb9\xd8\xaf\xd8\xa9'
+                          ' \xd8\xb3\xd8\xb7\xd9\x88\xd8\xb1 multiple lines.'
+                      ]
+
+        assert len(ltrStrings) == len(rtlStrings)
+        n = len(ltrStrings)
+        
+        # create a store to be printed
+        story = []
+        
+        # write every LTR string and its corresponding RTL string to be matched.
+        for i in range(0, n):
+            story.append(Paragraph(ltrStrings[i], styLTR))
+            story.append(Paragraph(rtlStrings[i], styRTL))
+
+        # a few additional scripts for testing.
+        story.append(
+            Paragraph('\xd9\x87\xd8\xb0\xd9\x87 \xd9\x81\xd9\x82\xd8\xb1\xd8\xa9'
+                          ' \xd8\xb9\xd8\xa7\xd8\xaf\xd9\x8a\xd8\xa9. ', styRTL))
+        story.append(
+            Paragraph('\xd9\x87\xd8\xb0\xd9\x87 \xd8\xa7\xd9\x84\xd9\x81\xd9\x82\xd8\xb1\xd8\xa9'
+                          ' \xd9\x84\xd8\xaf\xd9\x8a\xd9\x87\xd8\xa7 12'
+                          ' \xd9\x86\xd9\x82\xd8\xb7\xd8\xa9 \xd9\x82\xd8\xa8\xd9\x84\xd9\x87\xd8\xa7'
+                          ' \xd9\x88\xd8\xa8\xd8\xb9\xd8\xaf\xd9\x87\xd8\xa7. ', styRTL))
+        story.append(
+            Paragraph('<para spacebefore="12" spaceafter="12">'
+                          '\xd9\x87\xd8\xb0\xd9\x87 \xd8\xa7\xd9\x84\xd9\x81\xd9\x82\xd8\xb1\xd8\xa9'
+                          ' \xd9\x84\xd8\xaf\xd9\x8a\xd9\x87\xd8\xa7 12 \xd9\x86\xd9\x82\xd8\xb7\xd8\xa9'
+                          ' \xd9\x82\xd8\xa8\xd9\x84\xd9\x87\xd8\xa7'
+                          ' \xd9\x88\xd8\xa8\xd8\xb9\xd8\xaf\xd9\x87\xd8\xa7\xd8\x8c'
+                          ' \xd9\x85\xd8\xad\xd8\xaf\xd8\xaf\xd8\xa9 \xd8\xa8\xd9\x80 XML.'
+                          ' \xd8\xa5\xd9\x86\xd9\x87\xd8\xa7 \xd8\xaa\xd8\xb9\xd9\x85\xd9\x84'
+                          ' \xd8\xa3\xd9\x8a\xd8\xb6\xd8\xa7! \xd9\x80.'
+                          '</para',
+                      styRTL))
+
+        # TODO: add more RTL scripts to the test (Farsi, Hebrew, etc.)
+
+        template = SimpleDocTemplate(outputfile('test_paragraphs_ar.pdf'),
+                                     showBoundary=1)
+        template.build(story,
+            onFirstPage=myFirstPage, onLaterPages=myLaterPages)
 
 
 def makeSuite():
