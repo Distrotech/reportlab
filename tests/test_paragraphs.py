@@ -179,11 +179,14 @@ class ParagraphTestCase(unittest.TestCase):
 
         # create styles based on the registered font
         from reportlab.lib.enums import TA_LEFT, TA_RIGHT
-        styLTR = ParagraphStyle('left', fontName = fontName, alignment = TA_LEFT)
-        styRTL = ParagraphStyle('right', parent=styLTR, alignment = TA_RIGHT)
+        styLTR = ParagraphStyle('left', fontName = fontName)
+        styRTL = ParagraphStyle('right', parent = styLTR, alignment = TA_RIGHT,
+                                wordWrap = 'RTL', spaceAfter = 12)
 
         # strings for testing LTR.
-        ltrStrings = [# English with Arabic in the middle
+        ltrStrings = [# English followed by Arabic.
+                      'English followed by \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a.',
+                      # English with Arabic in the middle
                       'English with \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a in the middle.',
                       # English symbols (!@#$%^&*) Arabic
                       'English symbols (!@#$%^&*) \xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a.',
@@ -203,7 +206,10 @@ class ParagraphTestCase(unittest.TestCase):
                       ]
 
         # strings for testing RTL
-        rtlStrings = [# Arabic with English in the middle
+        rtlStrings = [# Arabic followed by English
+                      '\xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a \xd9\x85\xd8\xaa\xd8\xa8\xd9\x88\xd8\xb9'
+                          ' \xd8\xa8\xd9\x80 English.',
+                      # Arabic with English in the middle
                       '\xd8\xb9\xd8\xb1\xd8\xa8\xd9\x8a \xd9\x85\xd8\xb9 English \xd9\x81\xd9\x8a'
                           ' \xd8\xa7\xd9\x84\xd9\x85\xd9\x86\xd8\xaa\xd8\xb5\xd9\x81.',
                       # Arabic symbols (!@##$%^&*) English
@@ -264,10 +270,9 @@ class ParagraphTestCase(unittest.TestCase):
 
         # TODO: add more RTL scripts to the test (Farsi, Hebrew, etc.)
 
-        template = SimpleDocTemplate(outputfile('test_paragraphs_ar.pdf'),
-                                     showBoundary=1)
-        template.build(story,
-            onFirstPage=myFirstPage, onLaterPages=myLaterPages)
+        template = SimpleDocTemplate(outputfile('test_paragraphs_ar.pdf')
+                                     )
+        template.build(story)
 
 
 def makeSuite():
