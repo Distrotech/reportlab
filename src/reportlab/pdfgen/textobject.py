@@ -15,6 +15,17 @@ from reportlab.lib.colors import Color, CMYKColor, CMYKColorSep, toColor
 from reportlab.lib.utils import fp_str
 from reportlab.pdfbase import pdfmetrics
 
+# try to import pyfribidi
+try:
+    import pyfribidi
+    log2vis = pyfribidi.log2vis
+    DIR_ON = pyfribidi.ON
+except:
+    import warnings
+    warnings.warn('pyfribidi is not installed - RTL not supported')
+    log2vis = None
+    DIR_ON = None
+
 class _PDFColorSetter:
     '''Abstracts the color setting operations; used in Canvas and Textobject
     asseumes we have a _code object'''
@@ -329,6 +340,9 @@ class PDFTextObject(_PDFColorSetter):
 
     def _formatText(self, text):
         "Generates PDF text output operator(s)"
+        # Use pyfribidi to write the text in the correct visual order.
+        text = log2vis(text, base_direction = DIR_ON)
+
         canv = self._canvas
         font = pdfmetrics.getFont(self._fontname)
         R = []
