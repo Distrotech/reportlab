@@ -161,7 +161,7 @@ class ParagraphTestCase(unittest.TestCase):
         template.build(story,
             onFirstPage=myFirstPage, onLaterPages=myLaterPages)
     
-    def testRTL(self):
+    def testBidi(self):
         def registerFont(filename):
             from reportlab.pdfbase import pdfmetrics
             from reportlab.pdfbase import ttfonts
@@ -270,8 +270,7 @@ class ParagraphTestCase(unittest.TestCase):
 
         # TODO: add more RTL scripts to the test (Farsi, Hebrew, etc.)
 
-        template = SimpleDocTemplate(outputfile('test_paragraphs_ar.pdf')
-                                     )
+        template = SimpleDocTemplate(outputfile('test_paragraphs_bidi.pdf'))
         template.build(story)
 
 
