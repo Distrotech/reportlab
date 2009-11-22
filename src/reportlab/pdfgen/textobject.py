@@ -17,7 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 
 # try to import pyfribidi
 try:
-    import pyfribidi
+    import pyfribidi2 as pyfribidi
     log2vis = pyfribidi.log2vis
     DIR_ON = pyfribidi.ON
     DIR_LTR = pyfribidi.LTR
