@@ -25,7 +25,7 @@ try:
 except:
     import warnings
     warnings.warn('pyfribidi is not installed - RTL not supported')
-    log2vis = None
+    log2vis = lambda text, direction: text
     DIR_ON = DIR_LTR = DIR_RTL = None
 
 class _PDFColorSetter:
