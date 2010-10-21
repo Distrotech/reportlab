@@ -8,6 +8,7 @@ font which are NOT 1000 ems wide, keyed on Unicode character (not CID).
 
 Running off CMAP files we get the following widths...::
 
+    >>> font = UnicodeCIDFont('HeiseiMin-W3')
     >>> font.stringWidth(unicode(','), 10)
     2.5
     >>> font.stringWidth(unicode('m'), 10)
@@ -40,7 +41,7 @@ def run():
         nonStandardWidthsByUnichar = {}
         for (codePoint, cid) in cmap.items():
             width = widthsByCID.get(cid, 1000)
-            if width <> 1000:
+            if width != 1000:
                 nonStandardWidthsByUnichar[unichr(codePoint)] = width
         
 

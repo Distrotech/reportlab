@@ -600,46 +600,119 @@ Notice that the text strings are painted backwards.
 """)
 
 heading2("Colors")
+disc("""
+There are generally two types of colors used in PDF depending on the media where
+the PDF will be used. The most commonly known screen colors model RGB can be used
+in PDF, however in professional printing another color model CMYK is mainly used 
+which gives more control over how inks are applied to paper. More on these color
+models below.
+""")
+
+heading3("RGB Colors")
+disc("""
+The $RGB$ or additive color representation follows the way a computer
+screen adds different levels of the red, green, and blue light to make
+any color in between, where white is formed by turning all three lights on full
+($1,1,1$).
+""")
 
 disc("""
-There are four ways to specify colors in $pdfgen$: by name (using the $color$
-module, by red/green/blue (additive, $RGB$) value,
-by cyan/magenta/yellow/darkness (subtractive, $CMYK$), or by gray level.
+There are three ways to specify RGB colors in $pdfgen$: by name (using the $color$
+module, by red/green/blue (additive, $RGB$) value, or by gray level.
 The $colors$ function below exercises each of the four methods.
 """)
 
-eg(examples.testcolors)
+eg(examples.testRGBcolors)
+illust(examples.colorsRGB, "RGB Color Models")
+
+heading4("RGB Color Transparency")
 
 disc("""
-The $RGB$ or additive color specification follows the way a computer
-screen adds different levels of the red, green, or blue light to make
-any color, where white is formed by turning all three lights on full
-$(1,1,1)$.""")
+Objects may be painted over other objects to good effect in $pdfgen$.  Generally
+There are two modes of handling objects that overlap in space, the default objects 
+in the top layer will hide any part of other objects that falls underneath it. If you
+need transparency you got two choices:
+""")
 
-disc("""The $CMYK$ or subtractive method follows the way a printer
+disc("""
+1. If your document is intended to be printed in a professional way and you are 
+working in CMYK color space then you can use overPrint. In overPrinting the colors
+physically mix in the printer and thus a new color is obtained. By default a 
+knockout will be applied and only top object appears. Read the CMYK section
+if this is what you intend to use.
+""")
+
+disc("""
+2. If your document is intended for screen output and you are using RGB colors 
+then you can set an alpha value, where alpha is the opacity value of the color.
+The default alpha value is $1$ (fully opaque) and you can use any real number
+value in the range 0-1.
+""")
+
+disc("""
+Alpha transparency ($alpha$) is similar to overprint but works in RGB color space
+this example below demonstrates the alpha funtionality. Refer to our website
+http://www.reportlab.com/snippets/ and look for snippets of overPrint and alpha
+to see the code that generates the graph below.
+""")
+
+eg(examples.testalpha)
+illust(examples.alpha, "Alpha example")
+
+heading3("CMYK Colors")
+disc("""
+The $CMYK$ or subtractive method follows the way a printer
 mixes three pigments (cyan, magenta, and yellow) to form colors.
 Because mixing chemicals is more difficult than combining light there
 is a fourth parameter for darkness.  For example a chemical
 combination of the $CMY$ pigments generally never makes a perfect
 black -- instead producing a muddy color -- so, to get black printers
-don't use the $CMY$ pigments but use a direct black ink.  Because
+don not use the $CMY$ pigments but use a direct black ink.  Because
 $CMYK$ maps more directly to the way printer hardware works it may
 be the case that colors specified in $CMYK$ will provide better fidelity
 and better control when printed.
 """)
 
-illust(examples.colors, "Color Models")
-
-heading2('Painting back to front')
-
 disc("""
-Objects may be painted over other objects to good effect in $pdfgen$.  As
-in painting with oils the object painted last will show up on top.  For
-example, the $spumoni$ function below paints up a base of colors and then
-paints a white text over the base.
+There are two ways of representing CMYK Color: each color can be represented either
+by a real value between 0 and 1, or integer value between 0 and 100. Depending
+on your preference you can either use CMYKColor (for real values) or PCMYKColor ( for 
+integer values). 0 means 'no ink', so printing on white papers gives you white. 1 (or 100
+if you use PCMYKColor) means 'the maximum amount of ink'. e.g. CMYKColor(0,0,0,1) is black,
+CMYKColor(0,0,0,0) means 'no ink', and CMYKColor(0.5,0,0,0) means 50 percent cyan color.
+""")
+eg(examples.testCMYKcolors)
+illust(examples.colorsCMYK, "CMYK Color Models")
+
+heading2("Color space checking")
+disc("""The $enforceColorSpace$ argument of the canvas is used to enforce the consistency
+of the colour model used in a document. It accepts these values: CMYK, RGB, SEP, SEP_BLACK,
+SEP_CMYK. 'SEP' refers to named color separations such as Pantone spot colors - these can
+be mixed with CMYK or RGB according to the parameter used.  The default is 'MIXED' which
+allows you to use colors from any color space.  An exception is raised if any colors used
+are not convertible to the specified model, e.g. rgb and cmyk (more information in
+test_pdfgen_general). This approach doesn't check external images included in document.
 """)
 
-eg(examples.testspumoni)
+heading2("Color Overprinting")
+
+disc("""
+When two CMYK colored objects overlap in printing, then either the object 'on top'
+will knock out the color of the the one underneath it, or the colors of the two
+objects will mix in the overlapped area.
+This behaviour can be set using the property $overPrint$.
+""")
+
+disc("""
+The $overPrint$ function will cause ovelapping areas of color to mix. In the example
+below, the colors of the rectangles on the left should appear mixed where they overlap
+- If you can't see this effect then you may need to enable the 'overprint preview'
+option in your PDF viewing software.  Some PDF viewers such as $evince$ do not
+support overPrint; however Adobe Acrobat Reader does support it.
+""")
+illust(examples.overPrint, "overPrint example")
+
+heading3("Other Object Order of Printing Examples")
 
 disc("""
 The word "SPUMONI" is painted in white over the colored rectangles,
@@ -647,6 +720,7 @@ with the apparent effect of "removing" the color inside the body of
 the word.
 """)
 
+eg(examples.testspumoni)
 illust(examples.spumoni, "Painting over colors")
 
 disc("""
@@ -669,7 +743,6 @@ $spumoni$ drawing.  Note that different parts of the cone
 and scoops layer over eachother as well.
 """)
 illust(examples.spumoni2, "building up a drawing in layers")
-
 
 heading2('Standard fonts and text objects')
 

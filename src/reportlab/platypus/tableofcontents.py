@@ -46,8 +46,8 @@ epsilon.
 
 from reportlab.lib import enums
 from reportlab.lib.units import cm
-from reportlab.lib.utils import commasplit
-from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.utils import commasplit, escapeOnce
+from reportlab.lib.styles import ParagraphStyle, _baseFontName
 from reportlab.platypus.paragraph import Paragraph
 from reportlab.platypus.doctemplate import IndexingFlowable
 from reportlab.platypus.tables import TableStyle, Table
@@ -84,10 +84,24 @@ def drawPageNumbers(canvas, style, pages, availWidth, availHeight, dot=' . '):
     pages.sort()
     pagestr = ', '.join([str(p) for p, _ in pages])
     x, y = canvas._curr_tx_info['cur_x'], canvas._curr_tx_info['cur_y']
-    pagestrw = stringWidth(pagestr, style.fontName, style.fontSize)
+    
+    fontSize = style.fontSize
+    pagestrw = stringWidth(pagestr, style.fontName, fontSize)
+    
+    #if it's too long to fit, we need to shrink to fit in 10% increments.
+    #it would be very hard to output multiline entries.
+    #however, we impose a minimum size of 1 point as we don't want an
+    #infinite loop.   Ultimately we should allow a TOC entry to spill
+    #over onto a second line if needed.
+    freeWidth = availWidth-x
+    while pagestrw > freeWidth and fontSize >= 1.0:
+        fontSize = 0.9 * fontSize
+        pagestrw = stringWidth(pagestr, style.fontName, fontSize)
+        
+    
     if isinstance(dot, basestring):
         if dot:
-            dotw = stringWidth(dot, style.fontName, style.fontSize)
+            dotw = stringWidth(dot, style.fontName, fontSize)
             dotsn = int((availWidth-x-pagestrw)/dotw)
         else:
             dotsn = dotw = 0
@@ -102,16 +116,16 @@ def drawPageNumbers(canvas, style, pages, availWidth, availHeight, dot=' . '):
         raise TypeError('Argument dot should either be None or an instance of basestring.')
 
     tx = canvas.beginText(newx, y)
-    tx.setFont(style.fontName, style.fontSize)
+    tx.setFont(style.fontName, fontSize)
     tx.setFillColor(style.textColor)
     tx.textLine(text)
     canvas.drawText(tx)
 
-    commaw = stringWidth(', ', style.fontName, style.fontSize)
+    commaw = stringWidth(', ', style.fontName, fontSize)
     for p, key in pages:
         if not key:
             continue
-        w = stringWidth(str(p), style.fontName, style.fontSize)
+        w = stringWidth(str(p), style.fontName, fontSize)
         canvas.linkRect('', key, (pagex, y, pagex+w, y+style.leading), relative=1)
         pagex += w + commaw
 
@@ -126,7 +140,7 @@ epsilon = 0.5*cm
 defaultLevelStyles = [
     ParagraphStyle(
         name='Level 0',
-        fontName='Times-Roman',
+        fontName=_baseFontName,
         fontSize=10,
         leading=11,
         firstLineIndent = 0,
@@ -229,13 +243,14 @@ class TableOfContents(IndexingFlowable):
 
         def drawTOCEntryEnd(canvas, kind, label):
             '''Callback to draw dots and page numbers after each entry.'''
-            page, level = [ int(x) for x in label.split(',') ]
+            label = label.split(',')
+            page, level, key = int(label[0]), int(label[1]), eval(label[2],{})
             style = self.getLevelStyle(level)
             if self.dotsMinLevel >= 0 and level >= self.dotsMinLevel:
                 dot = ' . '
             else:
                 dot = ''
-            drawPageNumbers(canvas, style, [(page, None)], availWidth, availHeight, dot)
+            drawPageNumbers(canvas, style, [(page, key)], availWidth, availHeight, dot)
         self.canv.drawTOCEntryEnd = drawTOCEntryEnd
 
         tableData = []
@@ -243,7 +258,10 @@ class TableOfContents(IndexingFlowable):
             style = self.getLevelStyle(level)
             if key:
                 text = '<a href="#%s">%s</a>' % (key, text)
-            para = Paragraph('%s<onDraw name="drawTOCEntryEnd" label="%d,%d"/>' % (text, pageNum, level), style)
+                keyVal = repr(key).replace(',','\\x2c').replace('"','\\x2c')
+            else:
+                keyVal = None
+            para = Paragraph('%s<onDraw name="drawTOCEntryEnd" label="%d,%d,%s"/>' % (text, pageNum, level, keyVal), style)
             if style.spaceBefore:
                 tableData.append([Spacer(1, style.spaceBefore),])
             tableData.append([para,])
@@ -308,7 +326,8 @@ class SimpleIndex(IndexingFlowable):
             of the document and the gap filled with a repeating sequence of the string.
         tableStyle is the style used by the table which the index uses to draw itself. Use this to
             change properties like spacing between elements.
-        headers is a boolean. If it is True, alphabetic headers are displayed in the Index.
+        headers is a boolean. If it is True, alphabetic headers are displayed in the Index when the first
+        letter changes. If False, we just output some extra space before the next item 
         name makes it possible to use several indexes in one document. If you want this use this
             parameter to give each index a unique name. You can then index a term by refering to the
             name of the index which it should appear in:
@@ -320,7 +339,7 @@ class SimpleIndex(IndexingFlowable):
         
         if style is None:
             style = ParagraphStyle(name='index',
-                                        fontName='Times-Roman',
+                                        fontName=_baseFontName,
                                         fontSize=11)
         self.textStyle = style
         self.tableStyle = tableStyle or defaultTableStyle
@@ -408,7 +427,10 @@ class SimpleIndex(IndexingFlowable):
 
     def _build(self,availWidth,availHeight):
         _tempEntries = self._getlastEntries()
-        _tempEntries.sort(lambda a,b: cmp([x.upper() for x in a[0]], [x.upper() for x in b[0]]))
+        def getkey(seq):
+            return [x.upper() for x in seq[0]]
+        _tempEntries.sort(key=getkey)
+        #was: _tempEntries.sort(lambda a,b: cmp([x.upper() for x in a[0]], [x.upper() for x in b[0]]))
         leveloffset = self.headers and 1 or 0
 
         def drawIndexEntryEnd(canvas, kind, label):
@@ -421,17 +443,24 @@ class SimpleIndex(IndexingFlowable):
         alpha = ''
         tableData = []
         lastTexts = []
+        alphaStyle = self.getLevelStyle(0)
         for texts, pageNumbers in _tempEntries:
             texts = list(texts)
-            if self.headers:
-                alphaStyle = self.getLevelStyle(0)
-                nalpha = texts[0][0].upper()
-                if alpha != nalpha:
-                    alpha = nalpha
-                    tableData.append([Spacer(1, alphaStyle.spaceBefore),])
-                    tableData.append([Paragraph(alpha, alphaStyle),])
-                    tableData.append([Spacer(1, alphaStyle.spaceAfter),])
+            #track when the first character changes; either output some extra
+            #space, or the first letter on a row of its own.  We cannot do
+            #widow/orphan control, sadly.
+            nalpha = texts[0][0].upper()
+            if alpha != nalpha:
+                alpha = nalpha
+                if self.headers:
+                    header = alpha
+                else:
+                    header = ' '
+                tableData.append([Spacer(1, alphaStyle.spaceBefore),])
+                tableData.append([Paragraph(header, alphaStyle),])
+                tableData.append([Spacer(1, alphaStyle.spaceAfter),])
 
+                    
             i, diff = listdiff(lastTexts, texts)
             if diff:
                 lastTexts = texts
@@ -439,6 +468,11 @@ class SimpleIndex(IndexingFlowable):
             label = encodestring(dumps(list(pageNumbers))).strip()
             texts[-1] = '%s<onDraw name="drawIndexEntryEnd" label="%s"/>' % (texts[-1], label)
             for text in texts:
+                #Platypus and RML differ on how parsed XML attributes are escaped.  
+                #e.g. <index item="M&S"/>.  The only place this seems to bite us is in
+                #the index entries so work around it here.
+                text = escapeOnce(text)    
+                
                 style = self.getLevelStyle(i+leveloffset)
                 para = Paragraph(text, style)
                 if style.spaceBefore:

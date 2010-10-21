@@ -122,17 +122,17 @@ class CIDEncoding(pdfmetrics.Encoding):
 
 
         words = split(rawdata)
-        while words <> []:
+        while words != []:
             if words[0] == 'begincodespacerange':
                 words = words[1:]
-                while words[0] <> 'endcodespacerange':
+                while words[0] != 'endcodespacerange':
                     strStart, strEnd, words = words[0], words[1], words[2:]
                     start = int(strStart[1:-1], 16)
                     end = int(strEnd[1:-1], 16)
                     self._codeSpaceRanges.append((start, end),)
             elif words[0] == 'beginnotdefrange':
                 words = words[1:]
-                while words[0] <> 'endnotdefrange':
+                while words[0] != 'endnotdefrange':
                     strStart, strEnd, strValue = words[0:3]
                     start = int(strStart[1:-1], 16)
                     end = int(strEnd[1:-1], 16)
@@ -141,7 +141,7 @@ class CIDEncoding(pdfmetrics.Encoding):
                     words = words[3:]
             elif words[0] == 'begincidrange':
                 words = words[1:]
-                while words[0] <> 'endcidrange':
+                while words[0] != 'endcidrange':
                     strStart, strEnd, strValue = words[0:3]
                     start = int(strStart[1:-1], 16)
                     end = int(strEnd[1:-1], 16)
@@ -166,7 +166,7 @@ class CIDEncoding(pdfmetrics.Encoding):
         cmap = self._cmap
         lastChar = ''
         for char in text:
-            if lastChar <> '':
+            if lastChar != '':
                 #print 'convert character pair "%s"' % (lastChar + char)
                 num = ord(lastChar) * 256 + ord(char)
             else:
@@ -380,10 +380,10 @@ class UnicodeCIDFont(CIDFont):
     'UniJIS-UCS2-H'
     >>> #This is how PDF data gets encoded.
     >>> print heisei.formatForPdf('hello')
-    \\377\\376h\\000e\\000l\\000l\\000o\\000
+    \\000h\\000e\\000l\\000l\\000o
     >>> tokyo = u'\u6771\u4AEC'
     >>> print heisei.formatForPdf(tokyo)
-    \\377\\376qg\\354J
+    gqJ\\354
 
     """
 
@@ -510,7 +510,8 @@ def test():
 ##    print 'constructed all encodings in %0.2f seconds' % (finished - started)
 
 if __name__=='__main__':
-    import doctest, cidfonts
+    import doctest
+    import cidfonts
     doctest.testmod(cidfonts)
     #test()
 

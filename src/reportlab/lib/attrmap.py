@@ -41,14 +41,15 @@ class CallableValue:
         self.kw = kw
 
     def __call__(self):
-        return apply(self.func,self.args,self.kw)
+        return self.func(*self.args,**self.kw)
 
 class AttrMapValue:
     '''Simple multi-value holder for attribute maps'''
-    def __init__(self,validate=None,desc=None,initial=None, **kw):
+    def __init__(self,validate=None,desc=None,initial=None, advancedUsage=0, **kw):
         self.validate = validate or isAnything
         self.desc = desc
         self._initial = initial
+        self._advancedUsage = advancedUsage
         for k,v in kw.items():
             setattr(self,k,v)
 
@@ -60,6 +61,9 @@ class AttrMapValue:
         elif name=='hidden':
             return 0
         raise AttributeError, name
+
+    def __repr__(self):
+        return 'AttrMapValue(%s)' % ', '.join(['%s=%r' % i for i in self.__dict__.iteritems()])
 
 class AttrMap(UserDict):
     def __init__(self,BASE=None,UNWANTED=[],**kw):

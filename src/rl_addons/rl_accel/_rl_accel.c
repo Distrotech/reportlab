@@ -29,304 +29,14 @@ static __version__=" $Id$ "
 #ifndef min
 #	define min(a,b) ((a)<(b)?(a):(b))
 #endif
-#define VERSION "0.61"
+#define VERSION "0.63"
 #define MODULE "_rl_accel"
 
 static PyObject *moduleVersion;
 static PyObject *moduleObject;
 static int moduleLineno;
-typedef struct _fI_t {
-		char*			name;
-		int				ascent, descent;
-		int				widths[256];
-		struct _fI_t*	next;
-		} fI_t;
-
-typedef struct _eI_t {
-		char*			name;
-		fI_t*			fonts;
-		struct _eI_t*	next;
-		} eI_t;
-
-eI_t		*Encodings=NULL;
-eI_t		*defaultEncoding = NULL;
-PyObject	*_SWRecover=NULL;
 
 static PyObject *ErrorObject;
-
-static	eI_t*	find_encoding(char* name)
-{
-	eI_t*	e = Encodings;
-	for(;e;e=e->next) if(!STRICMP(name,e->name)) return e;
-	return (eI_t*)0;
-}
-
-static	fI_t* find_font(char* name, fI_t* f)
-{
-	for(;f;f=f->next) if(!STRICMP(name,f->name)) return f;
-	return (fI_t*)0;
-}
-
-static	int _parseSequenceInt(PyObject* e, int i, int *x)
-{
-	PyObject	*p;
-	if((p = PySequence_GetItem(e,i)) && (p = PyNumber_Int(p))){
-		*x=PyInt_AS_LONG(p);
-		return 1;
-		}
-	return 0;
-}
-
-static PyObject *_pdfmetrics__SWRecover(PyObject* dummy, PyObject* args)
-{
-	PyObject *result = NULL;
-	PyObject *temp=NULL;
-
-	if (PyArg_ParseTuple(args, "|O:_SWRecover", &temp)) {
-		if(temp){
-			if (!PyCallable_Check(temp)) {
-				PyErr_SetString(PyExc_TypeError, "parameter must be callable");
-				return NULL;
-				}
-			Py_INCREF(temp);					/* Add a reference to new callback */
-			Py_XDECREF(_SWRecover);	/* Dispose of previous callback */
-			_SWRecover = temp;				/* Remember new callback */
-			}
-		else if(_SWRecover){
-			Py_INCREF(_SWRecover);
-			return _SWRecover;
-			}
-		/* Boilerplate to return "None" */
-		Py_INCREF(Py_None);
-		result = Py_None;
-		}
-	return result;
-}
-
-static PyObject *_pdfmetrics_defaultEncoding(PyObject *self, PyObject* args)
-{
-	char*	encoding=NULL;
-	eI_t*	e;
-	if (!PyArg_ParseTuple(args, "|s", &encoding)) return NULL;
-	if(encoding){
-		if(!(e= find_encoding(encoding))){
-			e = (eI_t*)malloc(sizeof(eI_t));
-			e->name = strdup(encoding);
-			e->next = Encodings;
-			e->fonts = NULL;
-			Encodings = e;
-			}
-		defaultEncoding = e;
-		}
-	else if(defaultEncoding) return Py_BuildValue("s",defaultEncoding->name);
-	Py_INCREF(Py_None);
-	return Py_None;
-}
-
-static PyObject *_pdfmetrics_setFontInfo(PyObject *self, PyObject* args)
-{
-	char		*fontName, *encoding;
-	int			ascent, descent;
-	PyObject	*pW;
-	int			i;
-	eI_t*		e;
-	fI_t*		f;
-
-	if (!PyArg_ParseTuple(args, "ssiiO", &fontName, &encoding, &ascent, &descent,&pW)) return NULL;
-	i = PySequence_Length(pW);
-	if(i!=256){
-badSeq:	PyErr_SetString(ErrorObject,"widths should be a length 256 sequence of integers");
-		return NULL;
-		}
-	e = find_encoding(encoding);
-	if(!e){
-		e = (eI_t*)malloc(sizeof(eI_t));
-		e->name = strdup(encoding);
-		e->next = Encodings;
-		e->fonts = NULL;
-		Encodings = e;
-		f = NULL;
-		}
-	else
-		f = find_font(fontName,e->fonts);
-
-	if(!f){
-		f = (fI_t*)malloc(sizeof(fI_t));
-		f->name = strdup(fontName);
-		f->next = e->fonts;
-		e->fonts = f;
-		}
-	f->ascent = ascent;
-	f->descent = descent;
-	for(i=0;i<256;i++)
-		if(!_parseSequenceInt(pW,i,&f->widths[i])) goto badSeq;
-
-	Py_INCREF(Py_None);
-	return Py_None;
-}
-
-static PyObject *_pdfmetrics_getFonts(PyObject *self, PyObject *args)
-{
-	char		*encoding=0;
-	fI_t*		f;
-	eI_t*		e;
-	int			nf;
-	PyObject	*r;
-	if (!PyArg_ParseTuple(args, "|s:getFonts", &encoding)) return NULL;
-	if(!(e=encoding?find_encoding(encoding):defaultEncoding)){
-		PyErr_SetString(ErrorObject,"unknown encoding");
-		return NULL;
-		}
-
-	for(nf=0,f=e->fonts;f;f=f->next) nf++;
-
-	r = PyList_New(nf);
-	for(nf=0,f=e->fonts;f;f=f->next) PyList_SetItem(r,nf++,PyString_FromString(f->name));
-
-	return r;
-}
-
-static PyObject *_pdfmetrics_getFontInfo(PyObject *self, PyObject* args)
-{
-	char		*fontName, *encoding=0;
-	eI_t*		e;
-	fI_t*		f;
-	int			i;
-	PyObject	*r, *t;
-
-	if (!PyArg_ParseTuple(args, "s|s", &fontName, &encoding)) return NULL;
-	if(!(e=encoding?find_encoding(encoding):defaultEncoding)){
-		PyErr_SetString(ErrorObject,"unknown encoding");
-		return NULL;
-		}
-
-	if(!(f = find_font(fontName,e->fonts))){
-		PyErr_SetString(ErrorObject,"unknown font");
-		return NULL;
-		}
-
-	t = PyList_New(256);
-	for(i=0;i<256;i++){
-		PyList_SetItem(t,i,PyInt_FromLong(f->widths[i]));
-		}
-	r = PyTuple_New(3);
-	PyTuple_SetItem(r,0,t);
-	PyTuple_SetItem(r,1,PyInt_FromLong(f->ascent));
-	PyTuple_SetItem(r,2,PyInt_FromLong(f->descent));
-	return r;
-}
-
-static PyObject *_pdfmetrics_stringWidth(PyObject *self, PyObject* args)
-{
-	char		*fontName, *encoding=NULL;
-	unsigned char *text;
-	double		fontSize;
-	fI_t		*fI;
-	eI_t		*e;
-	int			w, *width, i, textLen;
-	static int	recover=1;
-
-	if (!PyArg_ParseTuple(args, "s#sd|s", &text, &textLen, &fontName, &fontSize, &encoding)) return NULL;
-	if(fontSize<=0){
-		PyErr_SetString(ErrorObject,"bad fontSize");
-		return NULL;
-		}
-
-	if(!(e=encoding?find_encoding(encoding):defaultEncoding)){
-		PyErr_SetString(ErrorObject,"unknown encoding");
-		return NULL;
-		}
-
-	if(!(fI=find_font(fontName,e->fonts))){
-		if(_SWRecover && recover){
-			PyObject *arglist = Py_BuildValue("(s#sds)",text,textLen,fontName,fontSize,e->name);
-			PyObject *result;
-			if(!arglist){
-				PyErr_SetString(ErrorObject,"recovery failed!");
-				return NULL;
-				}
-			recover = 0;
-			result = PyEval_CallObject(_SWRecover, arglist);
-			recover = 1;
-			Py_DECREF(arglist);
-			if(!result) return NULL;
-			if(result!=Py_None) return result;
-			Py_DECREF(result);
-			if((fI=find_font(fontName,e->fonts))) goto L2;
-			}
-		PyErr_SetString(ErrorObject,"unknown font");
-		return NULL;
-		}
-
-L2:
-	width = fI->widths;
-	for(i=w=0;i<textLen;i++)
-		w += width[text[i]];
-
-	return Py_BuildValue("f",0.001*fontSize*w);
-}
-
-static PyObject *_pdfmetrics_instanceStringWidth(PyObject *unused, PyObject* args)
-{
-	PyObject	*pfontName, *self;
-	char		*fontName;
-	unsigned char *text;
-	double		fontSize;
-	fI_t		*fI;
-	eI_t		*e;
-	int			w, *width, i, textLen;
-	static int	recover=1;
-
-	if (!PyArg_ParseTuple(args, "Os#d", &self, &text, &textLen, &fontSize)) return NULL;
-	if(fontSize<=0){
-		PyErr_SetString(ErrorObject,"bad fontSize");
-		return NULL;
-		}
-
-	pfontName = PyObject_GetAttrString(self,"fontName");
-	if(!pfontName){
-		PyErr_SetString(PyExc_AttributeError,"No attribute fontName");
-		return NULL;
-		}
-
-	if(!PyString_Check(pfontName)){
-		Py_DECREF(pfontName);
-		PyErr_SetString(PyExc_TypeError,"Attribute fontName is not a string");
-		return NULL;
-		}
-	fontName = PyString_AsString(pfontName);
-
-	e = defaultEncoding;
-
-	if(!(fI=find_font(fontName,e->fonts))){
-		if(_SWRecover && recover){
-			PyObject *arglist = Py_BuildValue("(s#sds)",text,textLen,fontName,fontSize,e->name);
-			PyObject *result;
-			if(!arglist){
-				PyErr_SetString(ErrorObject,"recovery failed!");
-				goto L1;
-				}
-			recover = 0;
-			result = PyEval_CallObject(_SWRecover, arglist);
-			recover = 1;
-			Py_DECREF(arglist);
-			if(!result) goto L1;
-			if(result!=Py_None) return result;
-			Py_DECREF(result);
-			if((fI=find_font(fontName,e->fonts))) goto L2;
-			}
-		PyErr_SetString(ErrorObject,"unknown font");
-L1:		Py_DECREF(pfontName);
-		return NULL;
-		}
-
-L2:	Py_DECREF(pfontName);
-	width = fI->widths;
-	for(i=w=0;i<textLen;i++)
-		w += width[text[i]];
-
-	return Py_BuildValue("f",0.001*fontSize*w);
-}
 
 #define a85_0		   1L
 #define a85_1		   85L
@@ -722,7 +432,6 @@ static PyObject *ttfonts_calcChecksumL(PyObject *self, PyObject* args)
 static PyObject *ttfonts_add32(PyObject *self, PyObject* args)
 {
 	unsigned long x, y;
-#if PY_VERSION_HEX>=0x02030000
 	PyObject	*ox, *oy;
 	if(!PyArg_ParseTuple(args, "OO:add32", &ox, &oy)) return NULL;
 	if(PyLong_Check(ox)){
@@ -739,9 +448,6 @@ static PyObject *ttfonts_add32(PyObject *self, PyObject* args)
 		y = PyInt_AsLong(oy);
 		if(PyErr_Occurred()) return NULL;
 		}
-#else
-	if(!PyArg_ParseTuple(args, "ii:add32", &x, &y)) return NULL;
-#endif
 	x += y;
 	return PyInt_FromLong(x);
 }
@@ -749,7 +455,6 @@ static PyObject *ttfonts_add32(PyObject *self, PyObject* args)
 static PyObject *ttfonts_add32L(PyObject *self, PyObject* args)
 {
 	unsigned long x, y;
-#if PY_VERSION_HEX>=0x02030000
 	PyObject	*ox, *oy;
 	if(!PyArg_ParseTuple(args, "OO:add32", &ox, &oy)) return NULL;
 	if(PyLong_Check(ox)){
@@ -766,9 +471,6 @@ static PyObject *ttfonts_add32L(PyObject *self, PyObject* args)
 		y = PyInt_AsLong(oy);
 		if(PyErr_Occurred()) return NULL;
 		}
-#else
-	if(!PyArg_ParseTuple(args, "ii:add32", &x, &y)) return NULL;
-#endif
 	x += y;
 	return PyLong_FromUnsignedLong(x&0xFFFFFFFFU);
 }
@@ -777,7 +479,6 @@ static PyObject *hex32(PyObject *self, PyObject* args)
 {
 	unsigned long x;
 	char	buf[20];
-#if PY_VERSION_HEX>=0x02030000
 	PyObject	*ox;
 	if(!PyArg_ParseTuple(args, "O:hex32", &ox)) return NULL;
 	if(PyLong_Check(ox)){
@@ -787,17 +488,12 @@ static PyObject *hex32(PyObject *self, PyObject* args)
 		x = PyInt_AsLong(ox);
 		if(PyErr_Occurred()) return NULL;
 		}
-#else
-	if(!PyArg_ParseTuple(args, "i:hex32", &x)) return NULL;
-#endif
 	sprintf(buf,"0X%8.8X",x);
 	return PyString_FromString(buf);
 }
 
-#if PY_VERSION_HEX>=0x02030000
-static PyObject *_notdefFont=NULL;
+static PyObject *_notdefFont=NULL;	/*should only be used by older versions of reportlab*/
 static PyObject *_notdefChar=NULL;
-
 static PyObject *_GetExcValue(void)
 {
 	PyObject *type = NULL, *value = NULL, *tb = NULL, *result=NULL;
@@ -823,13 +519,8 @@ static PyObject *_GetAttrString(PyObject *obj, char *name)
 	return res;
 }
 
-#if 0
-#	define ERROR_EXIT() goto L_ERR;
-#	define ADD_TB(name)
-#else
-#	define ERROR_EXIT() {moduleLineno=__LINE__;goto L_ERR;}
-#	define ADD_TB(name) _add_TB(name)
-#endif
+#define ERROR_EXIT() {moduleLineno=__LINE__;goto L_ERR;}
+#define ADD_TB(name) _add_TB(name)
 #include "compile.h"
 #include "frameobject.h"
 #include "traceback.h"
@@ -897,16 +588,6 @@ static PyObject *unicode2T1(PyObject *self, PyObject *args, PyObject *kwds)
 	font = Py_None; Py_INCREF(Py_None);
 	enc = Py_None; Py_INCREF(Py_None);
 
-	if(!_notdefFont){
-		_o1 = PyImport_ImportModule("reportlab.pdfbase.pdfmetrics"); if(!_o1) ERROR_EXIT();
-		_o2 = _GetAttrString(_o1,"_notdefFont");
-		_o3 = _GetAttrString(_o1,"_notdefChar");
-		if(!_o2 || !_o3 || !_o3) ERROR_EXIT();
-		_notdefFont = _o2;
-		_notdefChar = _o3;
-		Py_DECREF(_o1);
-		_o1 = _o2 = _o3 = NULL;
-		}
 
 	_o2 = PyList_New(0); if(!_o2) ERROR_EXIT();
 	Py_DECREF(R);
@@ -992,13 +673,38 @@ static PyObject *unicode2T1(PyObject *self, PyObject *args, PyObject *kwds)
 				Py_DECREF(_o2); _o1 = _o2 = _o3 = NULL;
 				}
 			else{
-				_o2 = PyInt_FromLong((j - i)); if(!_o2) ERROR_EXIT();
-				_o1 = PyNumber_Multiply(_notdefChar, _o2); if(!_o1) ERROR_EXIT();
-				Py_DECREF(_o2);
-				_o2 = PyTuple_New(2); if(!_o2) ERROR_EXIT();
-				PyTuple_SET_ITEM(_o2, 0, _notdefFont);
-				PyTuple_SET_ITEM(_o2, 1, _o1);
-				Py_INCREF(_notdefFont);
+				_o3 = _GetAttrString(font,"_notdefChar");
+				if(!_o3){
+					PyErr_Clear();
+					_o2 = PyInt_FromLong((j - i)); if(!_o2) ERROR_EXIT();
+					if(!_notdefFont){
+						_o1 = PyImport_ImportModule("reportlab.pdfbase.pdfmetrics"); if(!_o1) ERROR_EXIT();
+						_o2 = _GetAttrString(_o1,"_notdefFont");
+						_o3 = _GetAttrString(_o1,"_notdefChar");
+						if(!_o2 || !_o3 || !_o3) ERROR_EXIT();
+						_notdefFont = _o2;
+						_notdefChar = _o3;
+						Py_DECREF(_o1);
+						_o1 = _o2 = _o3 = NULL;
+						}
+					_o2 = PyInt_FromLong((j - i)); if(!_o2) ERROR_EXIT();
+					_o1 = PyNumber_Multiply(_notdefChar, _o2); if(!_o1) ERROR_EXIT();
+					Py_DECREF(_o2);
+					_o2 = PyTuple_New(2); if(!_o2) ERROR_EXIT();
+					PyTuple_SET_ITEM(_o2, 0, _notdefFont);
+					PyTuple_SET_ITEM(_o2, 1, _o1);
+					Py_INCREF(_notdefFont);
+					}
+				else{
+					_o2 = PyInt_FromLong((j - i)); if(!_o2) ERROR_EXIT();
+					_o1 = PyNumber_Multiply(_o3, _o2); if(!_o1) ERROR_EXIT();
+					Py_DECREF(_o2); Py_DECREF(_o3); _o2=_o3=NULL;
+					_o2 = PyTuple_New(2); if(!_o2) ERROR_EXIT();
+					_o3 = _GetAttrString(font,"_notdefFont"); if(!_o3) ERROR_EXIT();
+					PyTuple_SET_ITEM(_o2, 0, _o3);
+					PyTuple_SET_ITEM(_o2, 1, _o1);
+					Py_INCREF(_o3); _o3=NULL;
+					}
 				_o1 = NULL;
 				if(PyList_Append(R, _o2)) ERROR_EXIT();
 				Py_DECREF(_o2); _o2 = NULL;
@@ -1028,94 +734,6 @@ L_OK:
 	Py_DECREF(enc);
 	Py_DECREF(utext);
 	Py_DECREF(fonts);
-	return res;
-}
-static PyObject *_pdfmetrics_fonts = NULL;	/*the fontName to font map from pdfmetrics*/
-static PyObject *_pdfmetrics_ffar = NULL;	/*findFontAndRegister from pdfmetrics*/
-static PyObject *getFontU(PyObject *module, PyObject *args, PyObject *kwds)
-{
-	PyObject *fontName=NULL, *_o1=NULL, *_o2=NULL, *res=NULL;
-	static char *argnames[] = {"fontName",NULL};
-	if(!PyArg_ParseTupleAndKeywords(args, kwds, "O", argnames, &fontName)) return NULL;
-	if(!_pdfmetrics_fonts){
-		res = PyImport_ImportModule("reportlab.pdfbase.pdfmetrics");
-		if(!res) ERROR_EXIT();
-		_o1 = _GetAttrString(res,"_fonts");
-		if(!_o1) ERROR_EXIT();
-		_o2 = _GetAttrString(res,"findFontAndRegister");
-		if(!_o2) ERROR_EXIT();
-		_pdfmetrics_fonts = _o1;
-		_pdfmetrics_ffar = _o2;
-		Py_DECREF(res); _o1 = _o2 = res = NULL;
-		}
-	if((res = PyObject_GetItem(_pdfmetrics_fonts,fontName))) return res;
-	if(!PyErr_ExceptionMatches(PyExc_KeyError)) ERROR_EXIT();
-	PyErr_Clear();
-	_o1 = PyTuple_New(1); if(!_o1) ERROR_EXIT();
-	PyTuple_SET_ITEM(_o1, 0, fontName);
-	Py_INCREF(fontName);
-	res = PyObject_CallObject(_pdfmetrics_ffar,_o1);
-	Py_DECREF(_o1);	/*NB this should decremnent fontName as well*/
-	return res;
-
-L_ERR:
-	ADD_TB("getFontU");
-	Py_XDECREF(_o1);
-	Py_XDECREF(_o2);
-	Py_XDECREF(res);
-	return NULL;
-}
-static PyObject *stringWidthU(PyObject *self, PyObject *args, PyObject *kwds)
-{
-	PyObject	*text=NULL, *fontName=NULL, *fontSize=NULL, *encoding=NULL,
-				*res=NULL, *_o1=NULL, *_o2=NULL, *_o3=NULL;
-	static char *argnames[] = {"text","fontName","fontSize","encoding",0};
-	if(!PyArg_ParseTupleAndKeywords(args, kwds, "OOO|O", argnames, &text, &fontName, &fontSize, &_o1)) return NULL;
-	Py_INCREF(text);
-	Py_INCREF(fontName);
-	Py_INCREF(fontSize);
-	if(_o1){
-		encoding = _o1;
-		_o1 = NULL;
-		Py_INCREF(encoding);
-		}
-	else{
-		_o1 = PyString_FromString("utf8"); if(!_o1) ERROR_EXIT();
-		encoding = _o1;
-		_o1 = NULL;
-		}
-
-	/*getFont(fontName).stringWidth --> _o2*/
-	_o1 = PyTuple_New(1); if(!_o1) ERROR_EXIT();
-	Py_INCREF(fontName);
-	PyTuple_SET_ITEM(_o1, 0, fontName);
-	_o2 = getFontU(self,_o1,NULL); if(!_o2) ERROR_EXIT();
-	Py_DECREF(_o1);
-	_o1 = _GetAttrString(_o2, "stringWidth"); if(!_o1) ERROR_EXIT();
-	Py_DECREF(_o2);
-
-	_o2 = PyTuple_New(2); if(!_o2) ERROR_EXIT();
-	Py_INCREF(text);
-	PyTuple_SET_ITEM(_o2, 0, text);
-	Py_INCREF(fontSize);
-	PyTuple_SET_ITEM(_o2, 1, fontSize);
-	_o3 = PyDict_New(); if(!_o3) ERROR_EXIT();
-	if(PyDict_SetItemString(_o3, "encoding", encoding)<0) ERROR_EXIT();
-	res = PyEval_CallObjectWithKeywords(_o1, _o2, _o3); if(!res) ERROR_EXIT();
-	Py_DECREF(_o1);
-	Py_DECREF(_o2);
-	Py_DECREF(_o3);
-	goto L_OK;
-L_ERR:
-	ADD_TB("stringWidthU");
-	Py_XDECREF(_o1);
-	Py_XDECREF(_o2);
-	Py_XDECREF(_o3);
-L_OK:
-	Py_DECREF(text);
-	Py_DECREF(fontName);
-	Py_DECREF(fontSize);
-	Py_DECREF(encoding);
 	return res;
 }
 static PyObject *_instanceStringWidthU(PyObject *module, PyObject *args, PyObject *kwds)
@@ -1314,38 +932,12 @@ static PyObject *_reset(PyObject *module)
 		Py_DECREF(_notdefFont); _notdefFont = NULL;
 		Py_DECREF(_notdefChar);	_notdefChar = NULL;
 		}
-	if(_pdfmetrics_fonts){
-		Py_DECREF(_pdfmetrics_fonts); _pdfmetrics_fonts = NULL;
-		Py_DECREF(_pdfmetrics_ffar); _pdfmetrics_ffar = NULL;
-		}
 	Py_INCREF(Py_None);
 	return Py_None;
 }
-#if 0
-/*cannot seem to speed this up*/
-static PyObject *_instanceGetCharWidth(PyObject *module, PyObject *args, PyObject *kwds)
-{
-	PyObject *self, *code, *res, *_o1=NULL;
-	static char *argnames[]={"self","code",0};
-	if(!PyArg_ParseTupleAndKeywords(args, kwds, "OO", argnames, &self, &code)) return 0;
-	_o1 = _GetAttrString(self, "charWidths"); if(!_o1) ERROR_EXIT(); if(!PyDict_Check(_o1)){PyErr_SetString(PyExc_TypeError, "TTFontFace instance charWidths is not a dict");ERROR_EXIT();}
-	res = PyDict_GetItem(_o1,code);
-	if(!res){
-		res = _GetAttrString(self, "defaultWidth"); if(!res) ERROR_EXIT();
-		}
-	Py_INCREF(res);
-	Py_DECREF(_o1);
-	return res;
-L_ERR:
-	ADD_TB("_instanceGetCharWidth");
-	Py_XDECREF(_o1);
-	return NULL;
-}
-#endif
-#endif
 
-#if PY_VERSION_HEX>=0x02030000
 #define HAVE_BOX
+#ifdef HAVE_BOX
 /*Box start**************/
 typedef struct {
 	PyObject_HEAD
@@ -1650,13 +1242,7 @@ static PyTypeObject BoxList_type = {
 
 static char *__doc__=
 "_rl_accel contains various accelerated utilities\n\
-\tstringWidth a fast string width function (legacy)\n\
-\t_instanceStringWidth a method version of stringWidth (legacy)\n\
-\tdefaultEncoding gets/sets the default encoding for stringWidth (legacy)\n\
-\tgetFonts gets font names from the internal table (legacy)\n\
-\tgetFontInfo gets font info from the internal table (legacy)\n\
-\tsetFontInfo adds a font to the internal table (legacy)\n\
-\t_SWRecover gets/sets a callback for stringWidth recovery (legacy)\n\
+\n\
 \tescapePDF makes a string safe for PDF\n\
 \t_instanceEscapePDF method equivalent of escapePDF\n\
 \n\
@@ -1669,14 +1255,10 @@ static char *__doc__=
 "\tadd32 32 bit unsigned addition (legacy)\n"
 "\tadd32L 32 bit unsigned addition (returns long)\n"
 "\thex32 32 bit unsigned to 0X8.8X string\n"
-#if PY_VERSION_HEX>=0x02030000
-"\tstringWidthU version2 stringWidth\n\
-\t_instanceStringWidthU version2 Font instance stringWidth\n\
+"\t_instanceStringWidthU version2 Font instance stringWidth\n\
 \t_instanceStringWidthTTF version2 TTFont instance stringWidth\n\
-\tgetFontU version2 pdfdmetrics.getFont\n\
-\tunicodeT1 version2 pdfmetrics.unicode2T1\n\
+\tunicode2T1 version2 pdfmetrics.unicode2T1\n\
 \t_reset() version2 clears _rl_accel state\n"
-#endif
 #ifdef	HAVE_BOX
 "\tBox(width,character=None) creates a Knuth character Box with the specified width.\n"
 "\tGlue(width,stretch,shrink) creates a Knuth glue Box with the specified width, stretch and shrink.\n"
@@ -1686,17 +1268,6 @@ static char *__doc__=
 ;
 
 static struct PyMethodDef _methods[] = {
-	{"defaultEncoding", _pdfmetrics_defaultEncoding, 1, "defaultEncoding([encoding])\ngets/sets the default encoding."},
-	{"getFonts", _pdfmetrics_getFonts, 1, "getFonts()\nreturns font names."},
-	{"getFontInfo", _pdfmetrics_getFontInfo, 1, "getFontInfo(fontName,encoding)\nreturns info ([widths],ascent,descent)."},
-	{"setFontInfo", _pdfmetrics_setFontInfo, 1, "setFontInfo(fontName,encoding,ascent, descent, widths)\nadds the font to the table for encoding"},
-	{"stringWidth", _pdfmetrics_stringWidth, 1, "stringWidth(text,fontName,fontSize,[encoding]) returns width of text in points"},
-	{"_instanceStringWidth", _pdfmetrics_instanceStringWidth, 1, "_instanceStringWidth(text,fontSize) like stringWidth, but gets fontName from self"},
-	{"_SWRecover", _pdfmetrics__SWRecover, 1,
-					"_SWRecover([callable])\n"
-					"get/set the string width recovery\n"
-					"callback callable(text,font,size,encoding)\n"
-					"return None to retry or the correct result."},
 	{"_AsciiBase85Encode", _a85_encode, METH_VARARGS, "_AsciiBase85Encode(\".....\") return encoded string"},
 	{"_AsciiBase85Decode", _a85_decode, METH_VARARGS, "_AsciiBase85Decode(\".....\") return decoded string"},
 	{"escapePDF", escapePDF, METH_VARARGS, "escapePDF(s) return PDF safed string"},
@@ -1708,17 +1279,10 @@ static struct PyMethodDef _methods[] = {
 	{"add32", ttfonts_add32, METH_VARARGS, "add32(x,y)  32 bit unsigned x+y (legacy)"},
 	{"add32L", ttfonts_add32L, METH_VARARGS, "add32L(x,y)  32 bit unsigned x+y (returns long)"},
 	{"hex32", hex32, METH_VARARGS, "hex32(x)  32 bit unsigned-->0X8.8X string"},
-#if PY_VERSION_HEX>=0x02030000
 	{"unicode2T1", (PyCFunction)unicode2T1, METH_VARARGS|METH_KEYWORDS, "return a list of (font,string) pairs representing the unicode text"},
-	{"getFontU", (PyCFunction)getFontU, METH_VARARGS|METH_KEYWORDS, "getFontU(name)-->Font instance"},
-	{"stringWidthU", (PyCFunction)stringWidthU, METH_VARARGS|METH_KEYWORDS, "stringWidthU(text,fontName,fontSize,encoding='utf8')--> font stringWidth(text,fontSize,encoding)"},
 	{"_instanceStringWidthU", (PyCFunction)_instanceStringWidthU, METH_VARARGS|METH_KEYWORDS, "Font.stringWidth(self,text,fontName,fontSize,encoding='utf8') --> width"},
 	{"_instanceStringWidthTTF", (PyCFunction)_instanceStringWidthTTF, METH_VARARGS|METH_KEYWORDS, "TTFont.stringWidth(self,text,fontName,fontSize,encoding='utf8') --> width"},
 	{"_reset", (PyCFunction)_reset, METH_NOARGS, "_rl_accel._reset() reset _rl_accel state"},
-#if	0
-	{"_instanceGetCharWidth", (PyCFunction)_instanceGetCharWidth, METH_VARARGS|METH_KEYWORDS, "TTFontFace.getCharWidth(self,code) --> width"},
-#endif
-#endif
 #ifdef	HAVE_BOX
 	{"Box",	(PyCFunction)Box,	METH_VARARGS|METH_KEYWORDS, "Box(width,character=None) create a Knuth Box instance"},
 	{"Glue", (PyCFunction)Glue,	METH_VARARGS|METH_KEYWORDS, "Glue(width,stretch,shrink) create a Knuth Glue instance"},
@@ -1730,9 +1294,6 @@ static struct PyMethodDef _methods[] = {
 /*Initialization function for the module (*must* be called init_pdfmetrics)*/
 void init_rl_accel(void)
 {
-#if PY_VERSION_HEX<0x02000000
-	PyObject *d;
-#endif
 
 	/*Create the module and add the functions and module doc string*/
 	moduleObject = Py_InitModule3("_rl_accel", _methods,__doc__);
@@ -1744,14 +1305,8 @@ void init_rl_accel(void)
 		}
 	Py_INCREF(ErrorObject);
 	moduleVersion = PyString_FromString(VERSION);
-#if PY_VERSION_HEX>=0x02000000
 	PyModule_AddObject(moduleObject, "error", ErrorObject);
 	PyModule_AddObject(moduleObject, "version", moduleVersion );
-#else
-	d = PyModule_GetDict(moduleObject);
-	PyDict_SetItemString(d, "error", ErrorObject );
-	PyDict_SetItemString(d, "version", moduleVersion );
-#endif
 
 #ifdef	HAVE_BOX
 	BoxType.ob_type = &PyType_Type;

@@ -28,9 +28,9 @@ class PropHolder:
 
         if self._attrMap is not None:
             for key in self.__dict__.keys():
-                if key[0] <> '_':
+                if key[0] != '_':
                     msg = "Unexpected attribute %s found in %s" % (key, self)
-                    assert self._attrMap.has_key(key), msg
+                    assert key in self._attrMap, msg
             for (attr, metavalue) in self._attrMap.items():
                 msg = "Missing attribute %s from %s" % (attr, self)
                 assert hasattr(self, attr), msg
@@ -65,7 +65,7 @@ class PropHolder:
 
         props = {}
         for name in self.__dict__.keys():
-            if name[0:1] <> '_':
+            if name[0:1] != '_':
                 component = getattr(self, name)
 
                 if recur and isValidChild(component):
@@ -137,7 +137,7 @@ class Widget(PropHolder, shapes.UserNode):
 
     def _setKeywords(self,**kw):
         for k,v in kw.items():
-            if not self.__dict__.has_key(k):
+            if k not in self.__dict__:
                 setattr(self,k,v)
 
     def draw(self):
@@ -177,6 +177,14 @@ class ScaleWidget(Widget):
 
 _ItemWrapper={}
 
+class CloneMixin:
+    def clone(self,**kwds):
+        n = self.__class__()
+        n.__dict__.clear()
+        n.__dict__.update(self.__dict__)
+        if kwds: n.__dict__.update(kwds)
+        return n
+
 class TypedPropertyCollection(PropHolder):
     """A container with properties for objects of the same kind.
 
@@ -206,7 +214,7 @@ class TypedPropertyCollection(PropHolder):
         self.__dict__['_children'] = {}
 
     def wKlassFactory(self,Klass):
-        class WKlass(Klass):
+        class WKlass(Klass,CloneMixin):
             def __getattr__(self,name):
                 try:
                     return self.__class__.__bases__[0].__getattr__(self,name)
@@ -214,11 +222,11 @@ class TypedPropertyCollection(PropHolder):
                     i = self._index
                     if i:
                         c = self._parent._children
-                        if c.has_key(i) and c[i].__dict__.has_key(name):
+                        if i in c and name in c[i].__dict__:
                             return getattr(c[i],name)
                         elif len(i)==1:
                             i = i[0]
-                            if c.has_key(i) and c[i].__dict__.has_key(name):
+                            if i in c and name in c[i].__dict__:
                                 return getattr(c[i],name)
                     return getattr(self._parent,name)
         return WKlass
@@ -228,7 +236,7 @@ class TypedPropertyCollection(PropHolder):
             return self._children[index]
         except KeyError:
             Klass = self._value.__class__
-            if _ItemWrapper.has_key(Klass):
+            if Klass in _ItemWrapper:
                 WKlass = _ItemWrapper[Klass]
             else:
                 _ItemWrapper[Klass] = WKlass = self.wKlassFactory(Klass)
@@ -249,9 +257,9 @@ class TypedPropertyCollection(PropHolder):
             self._children[index] = child
             return child
 
-    def has_key(self,key):
+    def __contains__(self,key):
         if type(key) in (type(()),type([])): key = tuple(key)
-        return self._children.has_key(key)
+        return key in self._children
 
     def __setitem__(self, key, value):
         msg = "This collection can only hold objects of type %s" % self._value.__class__.__name__
@@ -271,7 +279,7 @@ class TypedPropertyCollection(PropHolder):
         for idx in self._children.keys():
             childProps = self._children[idx].getProperties(recur=recur)
             for (key, value) in childProps.items():
-                if not hasattr(self,key) or getattr(self, key)<>value:
+                if not hasattr(self,key) or getattr(self, key)!=value:
                     newKey = '[%s].%s' % (idx, key)
                     props[newKey] = value
         return props
@@ -311,14 +319,14 @@ class StyleProperties(PropHolder):
     """
 
     _attrMap = AttrMap(
-        strokeWidth = AttrMapValue(isNumber),
-        strokeLineCap = AttrMapValue(isNumber),
-        strokeLineJoin = AttrMapValue(isNumber),
-        strokeMiterLimit = AttrMapValue(None),
-        strokeDashArray = AttrMapValue(isListOfNumbersOrNone),
-        strokeOpacity = AttrMapValue(isNumber),
-        strokeColor = AttrMapValue(isColorOrNone),
-        fillColor = AttrMapValue(isColorOrNone),
+        strokeWidth = AttrMapValue(isNumber,desc='width of the stroke line'),
+        strokeLineCap = AttrMapValue(isNumber,desc='Line cap 0=butt, 1=round & 2=square',advancedUsage=1),
+        strokeLineJoin = AttrMapValue(isNumber,desc='Line join 0=miter, 1=round & 2=bevel',advancedUsage=1),
+        strokeMiterLimit = AttrMapValue(None,desc='miter limit control miter line joins',advancedUsage=1),
+        strokeDashArray = AttrMapValue(isListOfNumbersOrNone,desc='dashing patterns e.g. (1,3)'),
+        strokeOpacity = AttrMapValue(isNumber,desc='level of transparency (alpha) accepts values between 0..1',advancedUsage=1),
+        strokeColor = AttrMapValue(isColorOrNone,desc='the color of the stroke'),
+        fillColor = AttrMapValue(isColorOrNone,desc='the filling color'),
         desc = AttrMapValue(isString),
         )
 

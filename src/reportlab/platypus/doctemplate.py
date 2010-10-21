@@ -245,6 +245,7 @@ class PageTemplate:
     """
     def __init__(self,id=None,frames=[],onPage=_doNothing, onPageEnd=_doNothing,
                  pagesize=None):
+        frames = frames or []
         if type(frames) not in (ListType,TupleType): frames = [frames]
         assert filter(lambda x: not isinstance(x,Frame), frames)==[], "frames argument error"
         self.id = id
@@ -289,9 +290,8 @@ class PageTemplate:
 
 def _addGeneratedContent(flowables,frame):
     S = getattr(frame,'_generated_content',None)
-    if S:
-        for i,f in enumerate(S):
-            flowables.insert(i,f)
+    if S: 
+        flowables[0:0] = S
         del frame._generated_content
 
 
@@ -433,6 +433,7 @@ class BaseDocTemplate:
                     'title':None,
                     'author':None,
                     'subject':None,
+                    'creator':None,
                     'keywords':[],
                     'invariant':None,
                     'pageCompression':None,
@@ -441,6 +442,7 @@ class BaseDocTemplate:
                     '_debug':0,
                     'encrypt': None,
                     'cropMarks': None,
+                    'enforceColorSpace': None,
                     }
     _invalidInitArgs = ()
     _firstPageTemplateIndex = 0
@@ -452,7 +454,7 @@ class BaseDocTemplate:
         self._lifetimes = {}
 
         for k in self._initArgs.keys():
-            if not kw.has_key(k):
+            if k not in kw:
                 v = self._initArgs[k]
             else:
                 if k in self._invalidInitArgs:
@@ -772,17 +774,16 @@ class BaseDocTemplate:
                     n = 0
                 if n:
                     if not isinstance(S[0],(PageBreak,SlowPageBreak,ActionFlowable)):
-                        if frame.add(S[0], canv, trySplit=0):
-                            self._curPageFlowableCount += 1
-                            self.afterFlowable(S[0])
-                            _addGeneratedContent(flowables,frame)
-                        else:
+                        if not frame.add(S[0], canv, trySplit=0):
                             ident = "Splitting error(n==%d) on page %d in\n%s" % (n,self.page,self._fIdent(f,60,frame))
                             #leave to keep apart from the raise
                             raise LayoutError(ident)
-                        del S[0]
-                    for i,f in enumerate(S):
-                        flowables.insert(i,f)   # put split flowables back on the list
+                        self._curPageFlowableCount += 1
+                        self.afterFlowable(S[0])
+                        flowables[0:0] = S[1:]  # put rest of splitted flowables back on the list
+                        _addGeneratedContent(flowables,frame)
+                    else:
+                        flowables[0:0] = S  # put splitted flowables back on the list
                 else:
                     if hasattr(f,'_postponed'):
                         ident = "Flowable %s%s too large on page %d in frame %r%s of template %r" % \
@@ -818,7 +819,9 @@ class BaseDocTemplate:
         self.canv = canvasmaker(filename or self.filename,
                                 pagesize=self.pagesize,
                                 invariant=self.invariant,
-                                pageCompression=self.pageCompression)
+                                pageCompression=self.pageCompression,
+                                enforceColorSpace=self.enforceColorSpace,
+                                )
  
         getattr(self.canv,'setEncrypt',lambda x: None)(self.encrypt)
 
@@ -826,6 +829,7 @@ class BaseDocTemplate:
         self.canv.setAuthor(self.author)
         self.canv.setTitle(self.title)
         self.canv.setSubject(self.subject)
+        self.canv.setCreator(self.creator)
         self.canv.setKeywords(self.keywords)
 
         if self._onPage:
@@ -928,7 +932,9 @@ class BaseDocTemplate:
                    **buildKwds
                    ):
         """Makes multiple passes until all indexing flowables
-        are happy."""
+        are happy.
+        
+        Returns number of passes"""
         self._indexingFlowables = []
         #scan the story and keep a copy
         for thing in story:
@@ -973,7 +979,8 @@ class BaseDocTemplate:
 
         del self._multiBuildEdits
         if verbose: print 'saved'
-
+        return passes
+        
     #these are pure virtuals override in derived classes
     #NB these get called at suitable places by the base class
     #so if you derive and override the handle_xxx methods
@@ -1029,7 +1036,8 @@ class BaseDocTemplate:
         except:
             exc = sys.exc_info()[1]
             args = list(exc.args)
-            args[-1] += '\ndocExec %s lifetime=%r failed!' % (stmt,lifetime)
+            msg = '\ndocExec %s lifetime=%r failed!' % (stmt,lifetime)
+            args.append(msg)
             exc.args = tuple(args)
             for k in NS.iterkeys():
                 if k not in K0:
@@ -1145,7 +1153,7 @@ def progressCB(typ, value):
     print 'PROGRESS MONITOR:  %-10s   %d' % (typ, value)
 
 if __name__ == '__main__':
-
+    from reportlab.lib.styles import _baseFontName, _baseFontNameB
     def myFirstPage(canvas, doc):
         from reportlab.lib.colors import red
         PAGE_HEIGHT = canvas._pagesize[1]
@@ -1153,9 +1161,9 @@ if __name__ == '__main__':
         canvas.setStrokeColor(red)
         canvas.setLineWidth(5)
         canvas.line(66,72,66,PAGE_HEIGHT-72)
-        canvas.setFont('Times-Bold',24)
+        canvas.setFont(_baseFontNameB,24)
         canvas.drawString(108, PAGE_HEIGHT-108, "TABLE OF CONTENTS DEMO")
-        canvas.setFont('Times-Roman',12)
+        canvas.setFont(_baseFontName,12)
         canvas.drawString(4 * inch, 0.75 * inch, "First Page")
         canvas.restoreState()
 
@@ -1166,7 +1174,7 @@ if __name__ == '__main__':
         canvas.setStrokeColor(red)
         canvas.setLineWidth(5)
         canvas.line(66,72,66,PAGE_HEIGHT-72)
-        canvas.setFont('Times-Roman',12)
+        canvas.setFont(_baseFontName,12)
         canvas.drawString(4 * inch, 0.75 * inch, "Page %d" % doc.page)
         canvas.restoreState()
 

@@ -29,8 +29,10 @@ from copy import deepcopy, copy
 from reportlab.lib.colors import red, gray, lightgrey
 from reportlab.lib.utils import fp_str
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.styles import _baseFontName
 from reportlab.pdfbase import pdfutils
-from reportlab.rl_config import _FUZZ, overlapAttachedSpace
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.rl_config import _FUZZ, overlapAttachedSpace, ignoreContainerActions
 
 __all__=('TraceInfo','Flowable','XBox','Preformatted','Image','Spacer','PageBreak','SlowPageBreak',
         'CondPageBreak','KeepTogether','Macro','CallerMacro','ParagraphAndImage',
@@ -210,7 +212,7 @@ class XBox(Flowable):
         self.canv.line(0, self.height, self.width, 0)
 
         #centre the text
-        self.canv.setFont('Times-Roman',12)
+        self.canv.setFont(_baseFontName,12)
         self.canv.drawCentredString(0.5*self.width, 0.5*self.height, self.text)
 
 def _trimEmptyLines(lines):
@@ -266,6 +268,12 @@ class Preformatted(Flowable):
         self.height = self.style.leading*len(self.lines)
         return (self.width, self.height)
 
+    def minWidth(self):
+        style = self.style
+        fontSize = style.fontSize
+        fontName = style.fontName
+        return max([stringWidth(line,fontName,fontSize) for line in self.lines])
+
     def split(self, availWidth, availHeight):
         #returns two Preformatted objects
 
@@ -320,7 +328,7 @@ class Image(Flowable):
         fp = hasattr(filename,'read')
         if fp:
             self._file = filename
-            self.filename = `filename`
+            self.filename = repr(filename)
         else:
             self._file = self.filename = filename
         if not fp and os.path.splitext(filename)[1] in ['.jpg', '.JPG', '.jpeg', '.JPEG']:
@@ -371,6 +379,19 @@ class Image(Flowable):
             self.drawWidth = self.imageWidth*factor
             self.drawHeight = self.imageHeight*factor
 
+    def _restrictSize(self,aW,aH):
+        if self.drawWidth>aW+_FUZZ or self.drawHeight>aH+_FUZZ:
+            self._oldDrawSize = self.drawWidth, self.drawHeight
+            factor = min(float(aW)/self.drawWidth,float(aH)/self.drawHeight)
+            self.drawWidth *= factor
+            self.drawHeight *= factor
+        return self.drawWidth, self.drawHeight
+
+    def _unRestrictSize(self):
+        dwh = getattr(self,'_oldDrawSize',None)
+        if dwh:
+            self.drawWidth, self.drawHeight = dwh
+
     def __getattr__(self,a):
         if a=='_img':
             from reportlab.lib.utils import ImageReader  #this may raise an error
@@ -380,11 +401,11 @@ class Image(Flowable):
         elif a in ('drawWidth','drawHeight','imageWidth','imageHeight'):
             self._setup_inner()
             return self.__dict__[a]
-        raise AttributeError(a)
+        raise AttributeError("<Image @ 0x%x>.%s" % (id(self),a))
 
     def wrap(self, availWidth, availHeight):
         #the caller may decide it does not fit.
-        return (self.drawWidth, self.drawHeight)
+        return self.drawWidth, self.drawHeight
 
     def draw(self):
         lazy = self._lazy
@@ -535,7 +556,7 @@ class KeepTogether(_ContainerSpace,Flowable):
         L = map(repr,f)
         L = "\n"+"\n".join(L)
         L = L.replace("\n", "\n  ")
-        return "KeepTogether(%s,maxHeight=%s) # end KeepTogether" % (L,self._maxHeight)
+        return "%s(%s,maxHeight=%s)" % (self.__class__.__name__,L,self._maxHeight)
 
     def wrap(self, aW, aH):
         dims = []
@@ -561,7 +582,7 @@ class KeepTogether(_ContainerSpace,Flowable):
         return S
 
     def identity(self, maxLen=None):
-        msg = "<KeepTogether at %s%s> containing :%s" % (hex(id(self)),self._frameName(),"\n".join([f.identity() for f in self._content]))
+        msg = "<%s at %s%s> containing :%s" % (self.__class__.__name__,hex(id(self)),self._frameName(),"\n".join([f.identity() for f in self._content]))
         if maxLen:
             return msg[0:maxLen]
         else:
@@ -629,7 +650,7 @@ class ParagraphAndImage(Flowable):
         intermediate_widths = later_widths - xpad - wI
         first_line_width = intermediate_widths - style.firstLineIndent
         P.width = 0
-        nIW = int((hI+ypad)/leading)
+        nIW = int((hI+ypad)/(leading*1.0))
         P.blPara = P.breakLines([first_line_width] + nIW*[intermediate_widths]+[later_widths])
         if self._side=='left':
             self._offsets = [wI+xpad]*(1+nIW)+[0]
@@ -731,6 +752,7 @@ def cdeepcopy(obj):
 class _Container(_ContainerSpace):  #Abstract some common container like behaviour
     def drawOn(self, canv, x, y, _sW=0, scale=1.0, content=None, aW=None):
         '''we simulate being added to a frame'''
+        from doctemplate import ActionFlowable
         pS = 0
         if aW is None: aW = self.width
         aW *= scale
@@ -739,6 +761,9 @@ class _Container(_ContainerSpace):  #Abstract some common container like behavio
         x = self._hAlignAdjust(x,_sW*scale)
         y += self.height*scale
         for c in content:
+            if not ignoreContainerActions and isinstance(c,ActionFlowable):
+                c.apply(self.canv._doctemplate)
+                continue
             w, h = c.wrapOn(canv,aW,0xfffffff)
             if (w<_FUZZ or h<_FUZZ) and not getattr(c,'_ZEROSIZE',None): continue
             if c is not content[0]: h += max(c.getSpaceBefore()-pS,0)
@@ -857,8 +882,9 @@ def _hmodel(s0,s1,h0,h1):
     b = b21*h0+b22*h1
     return a,b
 
-def _qsolve(h,(a,b)):
+def _qsolve(h,ab):
     '''solve the model v = a/s**2 + b/s for an s which gives us v==h'''
+    a,b = ab
     if abs(a)<=_FUZZ:
         return b/h
     t = 0.5*b/a
@@ -890,7 +916,7 @@ class KeepInFrame(_Container,Flowable):
         assert maxHeight>=0,  '%s invalid maxHeight value %s' % (self.identity(),maxHeight)
         if mergeSpace is None: mergeSpace = overlapAttachedSpace
         self.mergespace = mergeSpace
-        self._content = content
+        self._content = content or []
         self.vAlign = vAlign
         self.hAlign = hAlign
 
@@ -981,7 +1007,7 @@ class KeepInFrame(_Container,Flowable):
 class ImageAndFlowables(_Container,Flowable):
     '''combine a list of flowables and an Image'''
     def __init__(self,I,F,imageLeftPadding=0,imageRightPadding=3,imageTopPadding=0,imageBottomPadding=3,
-                    imageSide='right'):
+                    imageSide='right', imageHref=None):
         self._content = _flowableSublist(F)
         self._I = I
         self._irpad = imageRightPadding
@@ -989,6 +1015,7 @@ class ImageAndFlowables(_Container,Flowable):
         self._ibpad = imageBottomPadding
         self._itpad = imageTopPadding
         self._side = imageSide
+        self.imageHref = imageHref
 
     def deepcopy(self):
         c = copy(self)  #shallow
@@ -1017,12 +1044,15 @@ class ImageAndFlowables(_Container,Flowable):
 
     def wrap(self,availWidth,availHeight):
         canv = self.canv
+        I = self._I
         if hasattr(self,'_wrapArgs'):
-            if self._wrapArgs==(availWidth,availHeight):
+            if self._wrapArgs==(availWidth,availHeight) and getattr(I,'_oldDrawSize',None) is None:
                 return self.width,self.height
             self._reset()
+            I._unRestrictSize()
         self._wrapArgs = availWidth, availHeight
-        wI, hI = self._I.wrap(availWidth,availHeight)
+        I.wrap(availWidth,availHeight)
+        wI, hI = I._restrictSize(availWidth,availHeight)
         self._wI = wI
         self._hI = hI
         ilpad = self._ilpad
@@ -1046,8 +1076,10 @@ class ImageAndFlowables(_Container,Flowable):
 
     def split(self,availWidth, availHeight):
         if hasattr(self,'_wrapArgs'):
-            if self._wrapArgs!=(availWidth,availHeight):
+            I = self._I
+            if self._wrapArgs!=(availWidth,availHeight) or getattr(I,'_oldDrawSize',None) is not None:
                 self._reset()
+                I._unRestrictSize()
         W,H=self.wrap(availWidth,availHeight)
         if self._aH>availHeight: return []
         C1 = self._C1
@@ -1074,6 +1106,10 @@ class ImageAndFlowables(_Container,Flowable):
             Ix = x + self.width-self._wI-self._irpad
             Fx = x
         self._I.drawOn(canv,Ix,y+self.height-self._itpad-self._hI)
+
+        if self.imageHref:
+            canv.linkURL(self.imageHref, (Ix, y+self.height-self._itpad-self._hI, Ix + self._wI, y+self.height), relative=1)
+
         if self._C0:
             _Container.drawOn(self, canv, Fx, y, content=self._C0, aW=self._iW)
         if self._C1:
@@ -1144,7 +1180,7 @@ class FrameSplitter(NullDraw):
     _ZEROSIZE=1
     def __init__(self,nextTemplate,nextFrames=[],gap=10,required=72):
         self.nextTemplate=nextTemplate
-        self.nextFrames=nextFrames
+        self.nextFrames=nextFrames or []
         self.gap=gap
         self.required=required
 
@@ -1288,7 +1324,7 @@ class DocIf(DocPara):
     def __init__(self,cond,thenBlock,elseBlock=[]):
         Flowable.__init__(self)
         self.expr = cond
-        self.blocks = elseBlock,thenBlock
+        self.blocks = elseBlock or [],thenBlock
 
     def checkBlock(self,block):
         if not isinstance(block,(list,tuple)):

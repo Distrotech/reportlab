@@ -38,7 +38,7 @@ def getStateDelta(shape):
     the given shape would have on the graphics state"""
     delta = {}
     for (prop, value) in shape.getProperties().items():
-        if STATE_DEFAULTS.has_key(prop):
+        if prop in STATE_DEFAULTS:
             delta[prop] = value
     return delta
 
@@ -62,7 +62,7 @@ class StateTracker:
         if defaults is None:
             defaults = STATE_DEFAULTS.copy()
         #ensure  that if we have a transform, we have a CTM
-        if defaults.has_key('transform'):
+        if 'transform' in defaults:
             defaults['ctm'] = defaults['transform']
         self._combined.append(defaults)
 
@@ -100,7 +100,7 @@ class StateTracker:
         for key, curValue in lastDelta.items():
             #print '   key=%s, value=%s' % (key, curValue)
             prevValue = newState[key]
-            if prevValue <> curValue:
+            if prevValue != curValue:
                 #print '    state popping "%s"="%s"' % (key, curValue)
                 if key == 'transform':
                     reverseDelta[key] = inverse(lastDelta['transform'])
@@ -127,9 +127,10 @@ class StateTracker:
 def testStateTracker():
     print 'Testing state tracker'
     defaults = {'fillColor':None, 'strokeColor':None,'fontName':None, 'transform':[1,0,0,1,0,0]}
+    from reportlab.graphics.shapes import _baseGFontName
     deltas = [
         {'fillColor':'red'},
-        {'fillColor':'green', 'strokeColor':'blue','fontName':'Times-Roman'},
+        {'fillColor':'green', 'strokeColor':'blue','fontName':_baseGFontName},
         {'transform':[0.5,0,0,0.5,0,0]},
         {'transform':[0.5,0,0,0.5,2,3]},
         {'strokeColor':'red'}
@@ -253,6 +254,9 @@ class Renderer:
                 ocanvas = None
 
             self.fillDerivedValues(node)
+            dtcb = getattr(node,'_drawTimeCallback',None)
+            if dtcb:
+                dtcb(node,canvas=canvas,renderer=self)
             #draw the object, or recurse
             if isinstance(node, Line):
                 self.drawLine(node)

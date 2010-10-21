@@ -4,10 +4,7 @@
 
 __version__=''' $Id$ '''
 __doc__="Utilities used here and there."
-
 from time import mktime, gmtime, strftime
-import string
-
 
 ### Dinu's stuff used in some line plots (likely to vansih).
 
@@ -15,7 +12,7 @@ def mkTimeTuple(timeString):
     "Convert a 'dd/mm/yyyy' formatted string to a tuple for use in the time module."
 
     list = [0] * 9
-    dd, mm, yyyy = map(int, string.split(timeString, '/'))
+    dd, mm, yyyy = map(int, timeString.split('/'))
     list[:3] = [yyyy, mm, dd]
 
     return tuple(list)
@@ -153,7 +150,7 @@ def find_good_grid(lower,upper,n=(4,5,6,7,8,9), grid=None):
     return t, hi, grid
 
 
-def ticks(lower, upper, n=(4,5,6,7,8,9), split=1, percent=0, grid=None):
+def ticks(lower, upper, n=(4,5,6,7,8,9), split=1, percent=0, grid=None, labelVOffset=0):
     '''
     return tick positions and labels for range lower<=x<=upper
     n=number of intervals to try (can be a list or sequence)
@@ -166,14 +163,14 @@ def ticks(lower, upper, n=(4,5,6,7,8,9), split=1, percent=0, grid=None):
     w = int(w)!=w
 
     if power > 3 or power < -3:
-        format = '%+'+`w+7`+'.0e'
+        format = '%+'+repr(w+7)+'.0e'
     else:
         if power >= 0:
             digits = int(power)+w
-            format = '%' + `digits`+'.0f'
+            format = '%' + repr(digits)+'.0f'
         else:
             digits = w-int(power)
-            format = '%'+`digits+2`+'.'+`digits`+'f'
+            format = '%'+repr(digits+2)+'.'+repr(digits)+'f'
 
     if percent: format=format+'%%'
     T = []
@@ -183,12 +180,12 @@ def ticks(lower, upper, n=(4,5,6,7,8,9), split=1, percent=0, grid=None):
         for i in xrange(n):
             v = t+grid*i
             T.append(v)
-            labels.append(format % v)
+            labels.append(format % (v+labelVOffset))
         return T, labels
     else:
         for i in xrange(n):
             v = t+grid*i
-            T.append((v, format % v))
+            T.append((v, format % (v+labelVOffset)))
         return T
 
 def findNones(data):
@@ -225,3 +222,92 @@ def maverage(data,n=6):
 
 def pairMaverage(data,n=6):
     return [(x[0],s) for x,s in zip(data, maverage([x[1] for x in data],n))]
+
+import weakref
+from reportlab.graphics.shapes import transformPoint, transformPoints, inverse, Ellipse
+from reportlab.lib.utils import flatten
+class DrawTimeCollector(object):
+    '''
+    generic mechanism for collecting information about nodes at the time they are about to be drawn
+    '''
+    def __init__(self,formats=['gif']):
+        self._nodes = weakref.WeakKeyDictionary()
+        self.clear()
+        self._pmcanv = None
+        self.formats = formats
+        self.disabled = False
+
+    def clear(self):
+        self._info = []
+        self._info_append = self._info.append
+
+    def record(self,func,node,*args,**kwds):
+        self._nodes[node] = (func,args,kwds)
+        node.__dict__['_drawTimeCallback'] = self
+
+    def __call__(self,node,canvas,renderer):
+        func = self._nodes.get(node,None)
+        if func:
+            func, args, kwds = func
+            i = func(node,canvas,renderer, *args, **kwds)
+            if i is not None: self._info_append(i)
+
+    @staticmethod
+    def rectDrawTimeCallback(node,canvas,renderer,**kwds):
+        A = getattr(canvas,'ctm',None)
+        if not A: return
+        x1 = node.x
+        y1 = node.y
+        x2 = x1 + node.width
+        y2 = y1 + node.height
+
+        D = kwds.copy()
+        D['rect']=DrawTimeCollector.transformAndFlatten(A,((x1,y1),(x2,y2)))
+        return D
+
+    @staticmethod
+    def transformAndFlatten(A,p):
+        ''' transform an flatten a list of points
+        A   transformation matrix
+        p   points [(x0,y0),....(xk,yk).....]
+        '''
+        if tuple(A)!=(1,0,0,1,0,0):
+            iA = inverse(A)
+            p = transformPoints(iA,p)
+        return tuple(flatten(p))
+
+    @property
+    def pmcanv(self):
+        if not self._pmcanv:
+            import renderPM
+            self._pmcanv = renderPM.PMCanvas(1,1)
+        return self._pmcanv
+
+    def wedgeDrawTimeCallback(self,node,canvas,renderer,**kwds):
+        A = getattr(canvas,'ctm',None)
+        if not A: return
+        if isinstance(node,Ellipse):
+            c = self.pmcanv
+            c.ellipse(node.cx, node.cy, node.rx,node.ry)
+            p = c.vpath
+            p = [(x[1],x[2]) for x in p]
+        else:
+            p = node.asPolygon().points
+            p = [(p[i],p[i+1]) for i in xrange(0,len(p),2)]
+
+        D = kwds.copy()
+        D['poly'] = self.transformAndFlatten(A,p)
+        return D
+
+    def save(self,fnroot):
+        '''
+        save the current information known to this collector
+        fnroot is the root name of a resource to name the saved info
+        override this to get the right semantics for your collector
+        '''
+        import pprint
+        f=open(fnroot+'.default-collector.out','w')
+        try:
+            pprint.pprint(self._info,f)
+        finally:
+            f.close()

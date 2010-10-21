@@ -224,7 +224,7 @@ class PDFDocument:
         return self._ID
 
     def SaveToFile(self, filename, canvas):
-        if callable(getattr(filename, "write",None)):
+        if hasattr(getattr(filename, "write",None),'__call__'):
             myfile = 0
             f = filename
             filename = utf8str(getattr(filename,'name',''))
@@ -273,7 +273,7 @@ class PDFDocument:
 
     def getInternalFontName(self, psfontname):
         fm = self.fontMapping
-        if fm.has_key(psfontname):
+        if psfontname in fm:
             return fm[psfontname]
         else:
             try:
@@ -350,6 +350,15 @@ class PDFDocument:
         else:
             self.info.subject = subject
 
+    def setCreator(self, creator):
+        "embeds in PDF file"
+
+        #allow resetting to clear it
+        if creator is None:
+            self.info.creator = '(unspecified)'
+        else:
+            self.info.creator = creator
+
     def setKeywords(self, keywords):
         "embeds a string containing keywords in PDF file"
 
@@ -398,7 +407,7 @@ class PDFDocument:
         File = PDFFile(self._pdfVersion) # output collector
         while done is None:
             counter += 1 # do next object...
-            if numbertoid.has_key(counter):
+            if counter in numbertoid:
                 id = numbertoid[counter]
                 #printidToOb
                 obj = idToOb[id]
@@ -444,14 +453,14 @@ class PDFDocument:
     def hasForm(self, name):
         """test for existence of named form"""
         internalname = xObjectName(name)
-        return self.idToObject.has_key(internalname)
+        return internalname in self.idToObject
 
     def getFormBBox(self, name, boxType="MediaBox"):
         """get the declared bounding box of the form as a list.
         If you specify a different PDF box definition (e.g. the
         ArtBox) and it has one, that's what you'll get."""
         internalname = xObjectName(name)
-        if self.idToObject.has_key(internalname):
+        if internalname in self.idToObject:
             theform = self.idToObject[internalname]
             if hasattr(theform,'_extra_pageCatcher_info'):
                 return theform._extra_pageCatcher_info[boxType]
@@ -494,14 +503,14 @@ class PDFDocument:
             if name is not None and name!=intname:
                 raise ValueError, "attempt to reregister object %s with new name %s" % (
                     repr(intname), repr(name))
-            if not idToObject.has_key(intname):
+            if intname not in idToObject:
                 raise ValueError, "object named but not registered"
             return PDFObjectReference(intname)
         # otherwise register the new object
         objectcounter = self.objectcounter = self.objectcounter+1
         if name is None:
             name = "R"+repr(objectcounter)
-        if idToObject.has_key(name):
+        if name in idToObject:
             other = idToObject[name]
             if other!=object:
                 raise ValueError, "redefining named object: "+repr(name)
@@ -643,8 +652,8 @@ class PDFDictionary:
         self.dict[name] = value
     def __getitem__(self, a):
         return self.dict[a]
-    def has_key(self,a):
-        return self.dict.has_key(a)
+    def __contains__(self,a):
+        return a in self.dict
     def Reference(self, name, document):
         self.dict[name] = document.Reference(self.dict[name])
     def format(self, document,IND=LINEEND+' '):
@@ -702,6 +711,7 @@ class ViewerPreferencesPDFDictionary(CheckedPDFDictionary):
                 HideWindowUI=checkPDFBoolean,
                 FitWindow=checkPDFBoolean,
                 CenterWindow=checkPDFBoolean,
+                DisplayDocTitle=checkPDFBoolean,    #contributed by mark Erbaugh
                 NonFullScreenPageMode=checkPDFNames(*'UseNone UseOutlines UseThumbs UseOC'.split()),
                 Direction=checkPDFNames(*'L2R R2L'.split()),
                 ViewArea=checkPDFNames(*'MediaBox CropBox BleedBox TrimBox ArtBox'.split()),
@@ -772,7 +782,7 @@ class PDFStream:
         if filters is None:
             filters = document.defaultStreamFilters
         # only apply filters if they haven't been applied elsewhere
-        if filters is not None and not dictionary.dict.has_key("Filter"):
+        if filters is not None and "Filter" not in dictionary.dict:
             # apply filters in reverse order listed
             rf = list(filters)
             rf.reverse()
@@ -806,7 +816,8 @@ def teststream(content=None):
         content = teststreamcontent
     content = string.strip(content)
     content = string.replace(content, "\n", LINEEND) + LINEEND
-    S = PDFStream(content = content,filters=[PDFBase85Encode,PDFZCompress])
+    S = PDFStream(content = content,
+                    filters=rl_config.useA85 and [PDFBase85Encode,PDFZCompress] or [PDFZCompress])
     # nothing else needed...
     S.__Comment__ = "test stream"
     return S
@@ -845,6 +856,7 @@ class PDFArrayCompact(PDFArray):
 
 INDIRECTOBFMT = "%(n)s %(v)s obj%(LINEEND)s%(content)s%(CLINEEND)sendobj%(LINEEND)s"
 class PDFIndirectObject:
+    __PDFObject__ = True
     __RefOnly__ = 1
     def __init__(self, name, content):
         self.name = name
@@ -928,7 +940,7 @@ class PDFCrossReferenceSubsection:
         lastentrynumber = firstentrynumber+nentries-1
         for id in idsequence:
             (num, version) = idToNV[id]
-            if taken.has_key(num):
+            if num in taken:
                 raise ValueError, "object number collision %s %s %s" % (num, repr(id), repr(taken[id]))
             if num>lastentrynumber or num<firstentrynumber:
                 raise ValueError, "object number %s not in range %s..%s" % (num, firstentrynumber, lastentrynumber)
@@ -1033,7 +1045,7 @@ class PDFCatalog:
                     D[k] = v
         # force objects to be references where required
         for k in Refs:
-            if D.has_key(k):
+            if k in D:
                 #print"k is", k, "value", D[k]
                 D[k] = document.Reference(D[k])
         dict = PDFDictionary(D)
@@ -1145,7 +1157,7 @@ class PDFPage(PDFCatalog):
             else:
                 S = PDFStream()
                 if self.compression:
-                    S.filters = [PDFBase85Encode, PDFZCompress]
+                    S.filters = rl_config.useA85 and [PDFBase85Encode, PDFZCompress] or [PDFZCompress]
                 S.content = stream
                 S.__Comment__ = "page stream"
                 self.Contents = S
@@ -1410,7 +1422,7 @@ class PDFOutlines:
         self.setDestinations(desttree)
 
     def setNameList(self, canvas, nametree):
-        "Explicit list so I don't need to do apply(...) in the caller"
+        "Explicit list so I don't need to do in the caller"
         desttree = self.translateNames(canvas, nametree)
         self.setDestinations(desttree)
 
@@ -1424,12 +1436,12 @@ class PDFOutlines:
         if Ot is StringType:
             destination = canvas._bookmarkReference(object)
             title = object
-            if destinationnamestotitles.has_key(object):
+            if object in destinationnamestotitles:
                 title = destinationnamestotitles[object]
             else:
                 destinationnamestotitles[title] = title
             destinationstotitles[destination] = title
-            if closedict.has_key(object):
+            if object in closedict:
                 closedict[destination] = 1 # mark destination closed
             return {object: canvas._bookmarkReference(object)} # name-->ref
         if Ot is ListType or Ot is TupleType:
@@ -1515,7 +1527,7 @@ class PDFOutlines:
                 raise ValueError, "bad outline leaf dictionary, should have one entry "+utf8str(elt)
             eltobj.Title = destinationnamestotitles[Title]
             eltobj.Dest = Dest
-            if te is TupleType and closedict.has_key(Dest):
+            if te is TupleType and Dest in closedict:
                 # closed subsection, count should be negative
                 eltobj.Count = -eltobj.Count
         return (firstref, lastref)
@@ -1529,14 +1541,14 @@ def count(tree, closedict=None):
         # leaf with subsections XXXX should clean up this structural usage
         (leafdict, subsections) = tree
         [(Title, Dest)] = leafdict.items()
-        if closedict and closedict.has_key(Dest):
+        if closedict and Dest in closedict:
             return 1 # closed tree element
     if tt is TupleType or tt is ListType:
         #return reduce(add, map(count, tree))
         counts = []
         for e in tree:
             counts.append(count(e, closedict))
-        return reduce(add, counts)
+        return sum(counts)  #used to be: return reduce(add, counts)
     return 1
 
 class PDFInfo:
@@ -1544,7 +1556,8 @@ class PDFInfo:
     File | Document Info in Acrobat Reader.  If this is wrong, you get
     Postscript errors while printing, even though it does not print."""
     __PDFObject__ = True
-    producer = "ReportLab http://www.reportlab.com"
+    producer = "ReportLab PDF Library - www.reportlab.com"
+    creator = "ReportLab PDF Library - www.reportlab.com"
     title = "untitled"
     author = "anonymous"
     subject = "unspecified"
@@ -1565,6 +1578,7 @@ class PDFInfo:
         D["Author"] = PDFString(self.author)
         D["CreationDate"] = PDFDate(invariant=self.invariant,dateFormatter=self._dateFormatter)
         D["Producer"] = PDFString(self.producer)
+        D["Creator"] = PDFString(self.creator)
         D["Subject"] = PDFString(self.subject)
         D["Keywords"] = PDFString(self.keywords)
 
@@ -1604,7 +1618,7 @@ class Annotation:
             d[name] = val
         d.update(kw)
         for name in self.required:
-            if not d.has_key(name):
+            if name not in d:
                 raise ValueError, "keyword argument %s missing" % name
         d = self.cvtdict(d,escape=escape)
         permitted = self.permitted
@@ -1676,7 +1690,7 @@ class LinkAnnotation(Annotation):
         d["Contents"] = self.Contents
         d["Subtype"] = "/Link"
         d["Dest"] = self.Destination
-        return apply(self.AnnotationDict, (), d)
+        return self.AnnotationDict(**d)
 
 # skipping names tree
 # skipping actions
@@ -1711,7 +1725,7 @@ class PDFDate:
             import time
             now = tuple(time.localtime(_getTimeStamp())[:6])
             from time import timezone
-            self.dhh = int(timezone / 3600)
+            self.dhh = int(timezone / (3600.0))
             self.dmm = (timezone % 3600) % 60
         self.date = now[:6]
         self.dateFormatter = dateFormatter
@@ -2018,7 +2032,7 @@ class PDFFormXObject:
                 resources.XObject = self.XObjects
             self.Resources=resources
         if self.compression:
-            self.Contents.filters = [PDFBase85Encode, PDFZCompress]
+            self.Contents.filters = rl_config.useA85 and [PDFBase85Encode, PDFZCompress] or [PDFZCompress]
         sdict = self.Contents.dictionary
         sdict["Type"] = PDFName("XObject")
         sdict["Subtype"] = PDFName("Form")
@@ -2057,7 +2071,7 @@ class PDFImageXObject:
         self.height = 23
         self.bitsPerComponent = 1
         self.colorSpace = 'DeviceGray'
-        self._filters = 'ASCII85Decode',
+        self._filters = rl_config.useA85 and ('ASCII85Decode',) or ()
         self.streamContent = """
             003B00 002700 002480 0E4940 114920 14B220 3CB650
             75FE88 17FF8C 175F14 1C07E2 3803C4 703182 F8EDFC
@@ -2076,7 +2090,10 @@ class PDFImageXObject:
             ext = string.lower(os.path.splitext(source)[1])
             src = open_for_read(source)
             if not(ext in ('.jpg', '.jpeg') and self.loadImageFromJPEG(src)):
-                self.loadImageFromA85(src)
+                if rl_config.useA85:
+                    self.loadImageFromA85(src)
+                else:
+                    self.loadImageFromRaw(src)
 
     def loadImageFromA85(self,source):
         IMG=[]
@@ -2107,10 +2124,26 @@ class PDFImageXObject:
         else: #maybe should generate an error, is this right for CMYK?
             self.colorSpace = 'DeviceCMYK'
             self._dotrans = 1
-        self.streamContent = pdfutils._AsciiBase85Encode(imageFile.read())
-        self._filters = 'ASCII85Decode','DCTDecode' #'A85','DCT'
+        self.streamContent = imageFile.read()
+        if rl_config.useA85:
+            self.streamContent = pdfutils._AsciiBase85Encode(self.streamContent)
+            self._filters = 'ASCII85Decode','DCTDecode' #'A85','DCT'
+        else:
+            self._filters = 'DCTDecode', #'DCT'
         self.mask = None
         return True
+
+    def loadImageFromRaw(self,source):
+        IMG=[]
+        imagedata = pdfutils.makeRawImage(source,IMG=IMG)
+        words = string.split(imagedata[1])
+        self.width, self.height = map(string.atoi,(words[1],words[3]))
+        self.colorSpace = {'/RGB':'DeviceRGB', '/G':'DeviceGray', '/CMYK':'DeviceCMYK'}[words[7]]
+        self.bitsPerComponent = 8
+        self._filters = 'FlateDecode', #'Fl'
+        if IMG: self._checkTransparency(IMG[0])
+        elif self.mask=='auto': self.mask = None
+        self.streamContent = string.join(imagedata[3:-1],'')
 
     def _checkTransparency(self,im):
         if self.mask=='auto':
@@ -2139,10 +2172,14 @@ class PDFImageXObject:
             self.width, self.height = im.getSize()
             raw = im.getRGBData()
             #assert len(raw) == self.width*self.height, "Wrong amount of data for image expected %sx%s=%s got %s" % (self.width,self.height,self.width*self.height,len(raw))
-            self.streamContent = pdfutils._AsciiBase85Encode(zlib.compress(raw))
+            self.streamContent = zlib.compress(raw)
+            if rl_config.useA85:
+                self.streamContent = pdfutils._AsciiBase85Encode(self.streamContent)
+                self._filters = 'ASCII85Decode','FlateDecode' #'A85','Fl'
+            else:
+                self._filters = 'FlateDecode', #'Fl'
             self.colorSpace= _mode2CS[im.mode]
             self.bitsPerComponent = 8
-            self._filters = 'ASCII85Decode','FlateDecode' #'A85','Fl'
             self._checkTransparency(im)
 
     def format(self, document):

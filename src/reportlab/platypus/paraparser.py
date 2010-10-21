@@ -34,8 +34,8 @@ superFraction = 0.5 # fraction of font size that a super script should be raised
 DEFAULT_INDEX_NAME='_indexAdd'
 
 
-def _convnum(s, unit=1):
-    if s[0] in ['+','-']:
+def _convnum(s, unit=1, allowRelative=True):
+    if s[0] in ('+','-') and allowRelative:
         try:
             return ('relative',int(s)*unit)
         except ValueError:
@@ -46,36 +46,43 @@ def _convnum(s, unit=1):
         except ValueError:
             return float(s)*unit
 
-def _num(s, unit=1):
+def _num(s, unit=1, allowRelative=True):
     """Convert a string like '10cm' to an int or float (in points).
        The default unit is point, but optionally you can use other
        default units like mm.
     """
-    if s[-2:]=='cm':
+    if s.endswith('cm'):
         unit=cm
         s = s[:-2]
-    if s[-2:]=='in':
+    if s.endswith('in'):
         unit=inch
         s = s[:-2]
-    if s[-2:]=='pt':
+    if s.endswith('pt'):
         unit=1
         s = s[:-2]
-    if s[-1:]=='i':
+    if s.endswith('i'):
         unit=inch
         s = s[:-1]
-    if s[-2:]=='mm':
+    if s.endswith('mm'):
         unit=mm
         s = s[:-2]
-    if s[-4:]=='pica':
+    if s.endswith('pica'):
         unit=pica
         s = s[:-4]
-    return _convnum(s,unit)
+    return _convnum(s,unit,allowRelative)
+
+def _numpct(s,unit=1,allowRelative=False):
+    if s.endswith('%'):
+        return _PCT(_convnum(s[:-1],allowRelative=allowRelative))
+    else:
+        return _num(s,unit,allowRelative)
 
 class _PCT:
     def __init__(self,v):
         self._value = v*0.01
 
     def normalizedValue(self,normalizer):
+        normalizer = normalizer or getattr(self,'_normalizer')
         return normalizer*self._value
 
 def _valignpc(s):
@@ -174,8 +181,8 @@ _anchorAttrMap = {'fontSize': ('fontSize', _num),
                 }
 _imgAttrMap = {
                 'src': ('src', None),
-                'width': ('width',_num),
-                'height':('height',_num),
+                'width': ('width',_numpct),
+                'height':('height',_numpct),
                 'valign':('valign',_valignpc),
                 }
 _indexAttrMap = {
@@ -189,9 +196,9 @@ def _addAttributeNames(m):
     K = m.keys()
     for k in K:
         n = m[k][0]
-        if not m.has_key(n): m[n] = m[k]
+        if n not in m: m[n] = m[k]
         n = string.lower(n)
-        if not m.has_key(n): m[n] = m[k]
+        if n not in m: m[n] = m[k]
 
 _addAttributeNames(_paraAttrMap)
 _addAttributeNames(_fontAttrMap)
@@ -529,6 +536,8 @@ def _greekConvert(data):
 #       <unichar name="unicode character name"/>
 #       <unichar value="unicode code point"/>
 #       <img src="path" width="1in" height="1in" valign="bottom"/>
+#               width="w%" --> fontSize*w/100   idea from Roberto Alsina
+#               height="h%" --> linewidth*h/100 <ralsina@netmanagers.com.ar>
 #       <greek> - </greek>
 #
 #       The whole may be surrounded by <para> </para> tags
@@ -695,7 +704,7 @@ class ParaParser(xmllib.XMLParser):
         self.handle_data(unichr(n).encode('utf8'))
 
     def handle_entityref(self,name):
-        if greeks.has_key(name):
+        if name in greeks:
             self.handle_data(greeks[name])
         else:
             xmllib.XMLParser.handle_entityref(self,name)
@@ -714,15 +723,15 @@ class ParaParser(xmllib.XMLParser):
         self._pop(greek=1)
 
     def start_unichar(self, attr):
-        if attr.has_key('name'):
-            if attr.has_key('code'):
+        if 'name' in attr:
+            if 'code' in attr:
                 self._syntax_error('<unichar/> invalid with both name and code attributes')
             try:
                 v = unicodedata.lookup(attr['name']).encode('utf8')
             except KeyError:
                 self._syntax_error('<unichar/> invalid name attribute\n"%s"' % name)
                 v = '\0'
-        elif attr.has_key('code'):
+        elif 'code' in attr:
             try:
                 v = unichr(int(eval(attr['code']))).encode('utf8')
             except:
@@ -862,11 +871,11 @@ class ParaParser(xmllib.XMLParser):
     def start_seq(self, attr):
         #if it has a template, use that; otherwise try for id;
         #otherwise take default sequence
-        if attr.has_key('template'):
+        if 'template' in attr:
             templ = attr['template']
             self.handle_data(templ % self._seq)
             return
-        elif attr.has_key('id'):
+        elif 'id' in attr:
             id = attr['id']
         else:
             id = None
@@ -889,10 +898,10 @@ class ParaParser(xmllib.XMLParser):
 
     def start_onDraw(self,attr):
         defn = ABag()
-        if attr.has_key('name'): defn.name = attr['name']
+        if 'name' in attr: defn.name = attr['name']
         else: self._syntax_error('<onDraw> needs at least a name attribute')
 
-        if attr.has_key('label'): defn.label = attr['label']
+        if 'label' in attr: defn.label = attr['label']
         defn.kind='onDraw'
         self._push(cbDefn=defn)
         self.handle_data('')
@@ -902,11 +911,11 @@ class ParaParser(xmllib.XMLParser):
     def start_index(self,attr):
         attr=self.getAttributes(attr,_indexAttrMap)
         defn = ABag()
-        if attr.has_key('item'):
+        if 'item' in attr:
             label = attr['item']
         else:
             self._syntax_error('<index> needs at least an item attribute')
-        if attr.has_key('name'):
+        if 'name' in attr:
             name = attr['name']
         else:
             name = DEFAULT_INDEX_NAME
@@ -1094,6 +1103,7 @@ class ParaParser(xmllib.XMLParser):
 
 if __name__=='__main__':
     from reportlab.platypus import cleanBlockQuotedText
+    from reportlab.lib.styles import _baseFontName
     _parser=ParaParser()
     def check_text(text,p=_parser):
         print '##########'
@@ -1111,11 +1121,11 @@ if __name__=='__main__':
                 else: print
 
     style=ParaFrag()
-    style.fontName='Times-Roman'
+    style.fontName=_baseFontName
     style.fontSize = 12
     style.textColor = black
     style.bulletFontName = black
-    style.bulletFontName='Times-Roman'
+    style.bulletFontName=_baseFontName
     style.bulletFontSize=12
 
     text='''
@@ -1133,7 +1143,7 @@ if __name__=='__main__':
     '''
     check_text(text)
     check_text('<para> </para>')
-    check_text('<para font="times-bold" size=24 leading=28.8 spaceAfter=72>ReportLab -- Reporting for the Internet Age</para>')
+    check_text('<para font="%s" size=24 leading=28.8 spaceAfter=72>ReportLab -- Reporting for the Internet Age</para>'%_baseFontName)
     check_text('''
     <font color=red>&tau;</font>Tell me, O muse, of that ingenious hero who travelled far and wide
     after he had sacked the famous town of Troy. Many cities did he visit,

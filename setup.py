@@ -6,7 +6,7 @@ platform = sys.platform
 pjoin = os.path.join
 abspath = os.path.abspath
 isfile = os.path.isfile
-isdir = os.path.isfile
+isdir = os.path.isdir
 dirname = os.path.dirname
 if __name__=='__main__':
     pkgDir=dirname(sys.argv[0])
@@ -197,7 +197,49 @@ reportlab_files= [
         'fonts/VeraBd.ttf',
         'fonts/VeraBI.ttf',
         'fonts/VeraIt.ttf',
+        'fonts/_abi____.pfb',
+        'fonts/_ab_____.pfb',
+        'fonts/_ai_____.pfb',
+        'fonts/_a______.pfb',
+        'fonts/cobo____.pfb',
+        'fonts/cob_____.pfb',
+        'fonts/com_____.pfb',
+        'fonts/coo_____.pfb',
+        'fonts/_ebi____.pfb',
+        'fonts/_eb_____.pfb',
+        'fonts/_ei_____.pfb',
+        'fonts/_er_____.pfb',
+        'fonts/Sy______.pfb',
+        'fonts/Zd______.pfb',
+        'fonts/Zx______.pfb',
+        'fonts/Zy______.pfb',
         ]
+
+def get_fonts(PACKAGE_DIR, reportlab_files):
+    import sys, os, os.path, urllib2, zipfile, StringIO
+    rl_dir = PACKAGE_DIR['reportlab']
+    if not [x for x in reportlab_files if not os.path.isfile(pjoin(rl_dir,x))]:
+        infoline("Standard T1 font curves already downloaded")
+        return
+    try:
+        infoline("Downloading standard T1 font curves")
+
+        remotehandle = urllib2.urlopen("http://www.reportlab.com/ftp/fonts/pfbfer.zip")
+        zipdata = StringIO.StringIO(remotehandle.read())
+        remotehandle.close()
+        archive = zipfile.ZipFile(zipdata)
+        dst = pjoin(rl_dir, 'fonts')
+
+        for name in archive.namelist():
+            if not name.endswith('/'):
+                outfile = open(os.path.join(dst, name), 'wb')
+                outfile.write(archive.read(name))
+                outfile.close()
+        xitmsg = "Finished download of standard T1 font curves"
+    except:
+        xitmsg = "Failed to download standard T1 font curves"
+    reportlab_files = [x for x in reportlab_files if os.path.isfile(pjoin(rl_dir,x))]
+    infoline(xitmsg)
 
 def main():
     #test to see if we've a special command
@@ -215,7 +257,6 @@ def main():
 
     SPECIAL_PACKAGE_DATA = {}
     RL_ACCEL = _find_rl_ccode('rl_accel','_rl_accel.c')
-    LIBS = []
     LIBRARIES=[]
     EXT_MODULES = []
     if not RL_ACCEL:
@@ -236,14 +277,14 @@ def main():
                                 include_dirs=[],
                             define_macros=[],
                             library_dirs=[],
-                            libraries=LIBS, # libraries to link against
+                            libraries=[], # libraries to link against
                             ),
                     Extension( 'sgmlop',
                             [pjoin(RL_ACCEL,'sgmlop.c')],
                             include_dirs=[],
                             define_macros=[],
                             library_dirs=[],
-                            libraries=LIBS, # libraries to link against
+                            libraries=[], # libraries to link against
                             ),
                     Extension( 'pyHnj',
                             [pjoin(RL_ACCEL,'pyHnjmodule.c'),
@@ -252,11 +293,10 @@ def main():
                             include_dirs=[],
                             define_macros=[],
                             library_dirs=[],
-                            libraries=LIBS, # libraries to link against
+                            libraries=[], # libraries to link against
                             ),
                     ]
     RENDERPM = _find_rl_ccode('renderPM','_renderPM.c')
-    LIBS = []
     if not RENDERPM:
         infoline( '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         infoline( '!No rl_accel code found, you can obtain it at     !')
@@ -267,6 +307,7 @@ def main():
         infoline( '#Attempting install of _renderPM')
         infoline( '#extensions from %r'%RENDERPM)
         LIBART_DIR=pjoin(RENDERPM,'libart_lgpl')
+        GT1_DIR=pjoin(RENDERPM,'gt1')
         MACROS=[('ROBIN_DEBUG',None)]
         MACROS=[]
         def libart_version():
@@ -279,25 +320,55 @@ def main():
                     if len(D)==3: break
             return (sys.platform == 'win32' and '\\"%s\\"' or '"%s"') % '.'.join(map(lambda k,D=D: D.get(k,'?'),K))
         LIBART_VERSION = libart_version()
-        SOURCES=[pjoin(RENDERPM,'_renderPM.c')]
-        LIBART_SRCS=glob.glob(pjoin(LIBART_DIR, 'art_*.c'))
-        GT1_DIR=pjoin(RENDERPM,'gt1')
-        LIBS = []       #assume empty libraries list
+        SOURCES=[pjoin(RENDERPM,'_renderPM.c'),
+                    pjoin(LIBART_DIR,'art_vpath_bpath.c'),
+                    pjoin(LIBART_DIR,'art_rgb_pixbuf_affine.c'),
+                    pjoin(LIBART_DIR,'art_rgb_svp.c'),
+                    pjoin(LIBART_DIR,'art_svp.c'),
+                    pjoin(LIBART_DIR,'art_svp_vpath.c'),
+                    pjoin(LIBART_DIR,'art_svp_vpath_stroke.c'),
+                    pjoin(LIBART_DIR,'art_svp_ops.c'),
+                    pjoin(LIBART_DIR,'art_vpath.c'),
+                    pjoin(LIBART_DIR,'art_vpath_dash.c'),
+                    pjoin(LIBART_DIR,'art_affine.c'),
+                    pjoin(LIBART_DIR,'art_rect.c'),
+                    pjoin(LIBART_DIR,'art_rgb_affine.c'),
+                    pjoin(LIBART_DIR,'art_rgb_affine_private.c'),
+                    pjoin(LIBART_DIR,'art_rgb.c'),
+                    pjoin(LIBART_DIR,'art_rgb_rgba_affine.c'),
+                    pjoin(LIBART_DIR,'art_svp_intersect.c'),
+                    pjoin(LIBART_DIR,'art_svp_render_aa.c'),
+                    pjoin(LIBART_DIR,'art_misc.c'),
+                    pjoin(GT1_DIR,'gt1-parset1.c'),
+                    pjoin(GT1_DIR,'gt1-dict.c'),
+                    pjoin(GT1_DIR,'gt1-namecontext.c'),
+                    pjoin(GT1_DIR,'gt1-region.c'),
+                    ]
 
         if platform=='win32':
-            FT_LIB=config('FREETYPE','lib',r'C:\devel\freetype-2.1.5\objs\freetype214.lib')
+            FT_LIB=os.environ.get('FT_LIB','')
+            if not FT_LIB: FT_LIB=config('FREETYPE','lib','')
+            if FT_LIB and not os.path.isfile(FT_LIB):
+                infoline('# freetype lib %r not found' % FT_LIB)
+                FT_LIB=[]
             if FT_LIB:
-                FT_INC_DIR=config('FREETYPE','incdir')
+                FT_INC_DIR=os.environ.get('FT_INC','')
+                if not FT_INC_DIR: FT_INC_DIR=config('FREETYPE','inc')
                 FT_MACROS = [('RENDERPM_FT',None)]
                 FT_LIB_DIR = [dirname(FT_LIB)]
                 FT_INC_DIR = [FT_INC_DIR or pjoin(dirname(FT_LIB_DIR[0]),'include')]
-                FT_LIB = [os.path.splitext(os.path.basename(FT_LIB))[0]]
-                infoline('# installing with win32 freetype %r' % FT_LIB[0])
+                FT_LIB_PATH = FT_LIB
+                FT_LIB = [os.path.splitext(os.path.basename(FT_LIB))[0]]                
+                if isdir(FT_INC_DIR[0]):                   
+                    infoline('# installing with freetype %r' % FT_LIB_PATH)
+                else:
+                    infoline('# freetype2 include folder %r not found' % FT_INC_DIR[0])
+                    FT_LIB=FT_LIB_DIR=FT_INC_DIR=FT_MACROS=[]
             else:
                 FT_LIB=FT_LIB_DIR=FT_INC_DIR=FT_MACROS=[]
         else:
-            FT_LIB_DIR=config('FREETYPE','libdir')
-            FT_INC_DIR=config('FREETYPE','incdir')
+            FT_LIB_DIR=config('FREETYPE','lib')
+            FT_INC_DIR=config('FREETYPE','inc')
             I,L=inc_lib_dirs()
             ftv = None
             for d in I:
@@ -323,26 +394,10 @@ def main():
                 FT_LIB=FT_LIB_DIR=FT_INC_DIR=FT_MACROS=[]
         if not FT_LIB:
             infoline('# installing without freetype no ttf, sorry!')
-
-        LIBRARIES+= [
-                    ('_renderPM_libart',
-                    {
-                    'sources':  LIBART_SRCS,
-                    'include_dirs': [RENDERPM,LIBART_DIR,],
-                    'macros': [('LIBART_COMPILATION',None),]+BIGENDIAN('WORDS_BIGENDIAN')+MACROS,
-                    #'extra_compile_args':['/Z7'],
-                    }
-                    ),
-                    ('_renderPM_gt1',
-                    {
-                    'sources':  pfxJoin(GT1_DIR,'gt1-dict.c','gt1-namecontext.c','gt1-parset1.c','gt1-region.c','parseAFM.c'),
-                    'include_dirs': [RENDERPM,GT1_DIR,],
-                    'macros': MACROS,
-                    #'extra_compile_args':['/Z7'],
-                    }
-                    ),
-                    ]
-
+            infoline('# You need to install a static library version of the freetype2 software')
+            infoline('# If you need truetype support in renderPM')
+            infoline('# You may need to edit setup.cfg (win32)')
+            infoline('# or edit this file to access the library if it is installed')
         EXT_MODULES +=  [Extension( '_renderPM',
                                         SOURCES,
                                         include_dirs=[RENDERPM,LIBART_DIR,GT1_DIR]+FT_INC_DIR,
@@ -350,7 +405,7 @@ def main():
                                         library_dirs=[]+FT_LIB_DIR,
 
                                         # libraries to link against
-                                        libraries=LIBS+FT_LIB,
+                                        libraries=FT_LIB,
                                         #extra_objects=['gt1.lib','libart.lib',],
                                         #extra_compile_args=['/Z7'],
                                         extra_link_args=[]
@@ -363,17 +418,17 @@ def main():
     for fn,dst in SPECIAL_PACKAGE_DATA.iteritems():
         shutil.copyfile(fn,pjoin(PACKAGE_DIR['reportlab'],dst))
         reportlab_files.append(dst)
-
+    get_fonts(PACKAGE_DIR, reportlab_files)
     try:
         setup(
             name="reportlab",
             version=get_version(),
-            license="BSD license (see license.txt for details), Copyright (c) 2000-2008, ReportLab Inc.",
+            license="BSD license (see license.txt for details), Copyright (c) 2000-2010, ReportLab Inc.",
             description="The Reportlab Toolkit",
             long_description="""The ReportLab Toolkit. An Open Source Python library for generating PDFs and graphics.""",
 
-            author="Robinson, Watters, Lee, Precedo, Becker and many more...",
-            author_email="info@reportlab.com",
+            author="Andy Robinson, Robin Becker, the ReportLab team and the community",
+            author_email="reportlab-users@lists2.reportlab.com",
             url="http://www.reportlab.com/",
             packages=[
                     'reportlab',
@@ -387,9 +442,12 @@ def main():
                     'reportlab.pdfgen',
                     'reportlab.platypus',
                     ],
+            # Ideally we'd have this but PIL via easy_install doesn't seem stable
+            #install_requires=[
+            #        'PIL',
+            #],
             package_dir = PACKAGE_DIR,
             package_data = {'reportlab': reportlab_files},
-            libraries = LIBRARIES,
             ext_modules =   EXT_MODULES,
             )
         print
@@ -399,6 +457,7 @@ def main():
         for dst in SPECIAL_PACKAGE_DATA.itervalues():
             os.remove(pjoin(PACKAGE_DIR['reportlab'],dst))
             reportlab_files.remove(dst)
+
 
 if __name__=='__main__':
     main()

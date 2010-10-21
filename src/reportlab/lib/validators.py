@@ -166,6 +166,16 @@ class _isColorOrNone(Validator):
         if x is None: return True
         return isColor(x)
 
+from reportlab.lib.normalDate import NormalDate
+class _isNormalDate(Validator):
+    def test(self,x):
+        if isinstance(x,NormalDate):
+            return True
+        return x is not None and self.normalizeTest(x)
+
+    def normalize(self,x):
+        return NormalDate(x)
+
 class _isValidChild(Validator):
     "ValidChild validator class."
     def test(self, x):
@@ -182,7 +192,7 @@ class _isValidChildOrNone(_isValidChild):
 
 class _isCallable(Validator):
     def test(self, x):
-        return callable(x)
+        return hasattr(x,'__call__')
 
 class OneOf(Validator):
     """Make validator functions for list of choices.
@@ -272,7 +282,7 @@ class matchesPattern(Validator):
             text = x
         else:
             text = str(x)
-        return (self._pattern.match(text) <> None)
+        return (self._pattern.match(text) != None)
 
 class DerivedValue:
     """This is used for magic values which work themselves out.
@@ -343,3 +353,4 @@ isCallable = _isCallable()
 isStringOrCallable=EitherOr((isString,isCallable),'isStringOrCallable')
 isStringOrCallableOrNone=NoneOr(isStringOrCallable,'isStringOrCallableNone')
 isStringOrNone=NoneOr(isString,'isStringOrNone')
+isNormalDate=_isNormalDate()

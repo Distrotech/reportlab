@@ -49,7 +49,6 @@ _tt2ps_map = {
             ('helvetica', 0, 1) :'Helvetica-Oblique',
             ('helvetica', 1, 1) :'Helvetica-BoldOblique',
 
-
             # there is only one Symbol font
             ('symbol', 0, 0) :'Symbol',
             ('symbol', 1, 0) :'Symbol',
@@ -61,33 +60,31 @@ _tt2ps_map = {
             ('zapfdingbats', 1, 0) :'ZapfDingbats',
             ('zapfdingbats', 0, 1) :'ZapfDingbats',
             ('zapfdingbats', 1, 1) :'ZapfDingbats',
-
-
             }
 
 _ps2tt_map={}
 for k,v in _tt2ps_map.items():
-    if not _ps2tt_map.has_key(k):
+    if k not in _ps2tt_map:
         _ps2tt_map[v.lower()] = k
 
 def ps2tt(psfn):
     'ps fontname to family name, bold, italic'
     psfn = psfn.lower()
-    if _ps2tt_map.has_key(psfn):
+    if psfn in _ps2tt_map:
         return _ps2tt_map[psfn]
-    raise ValueError, "Can't map determine family/bold/italic for %s" % psfn
+    raise ValueError("Can't map determine family/bold/italic for %s" % psfn)
 
 def tt2ps(fn,b,i):
     'family name + bold & italic to ps font name'
     K = (fn.lower(),b,i)
-    if _tt2ps_map.has_key(K):
+    if K in _tt2ps_map:
         return _tt2ps_map[K]
     else:
         fn, b1, i1 = ps2tt(K[0])
         K = fn, b1|b, i1|i
-        if _tt2ps_map.has_key(K):
+        if K in _tt2ps_map:
             return _tt2ps_map[K]
-    raise ValueError, "Can't find concrete font for family=%s, bold=%d, italic=%d" % (fn, b, i)
+    raise ValueError("Can't find concrete font for family=%s, bold=%d, italic=%d" % (fn, b, i))
 
 def addMapping(face, bold, italic, psname):
     'allow a custom font to be put in the mapping'

@@ -864,7 +864,7 @@ cost to performance.""")
     ### now do stuff for the outline
     #for x in outlinenametree: print x
     #stop
-    #apply(c.setOutlineNames0, tuple(outlinenametree))
+    #c.setOutlineNames0(*outlinenametree)
     return c
 
 
@@ -872,6 +872,8 @@ def run(filename):
     c = makeDocument(filename)
     c.setAuthor(u'R\xfcp\xe9rt B\xe8\xe4r')
     c.setTitle('R\xc3\xbcp\xc3\xa9rt B\xc3\xa8\xc3\xa4r\'s Book')
+    c.setCreator(u'Some Creator')
+    c.setSubject(u'Some Subject')
     c.save()
     c = makeDocument(filename)
     import os
@@ -989,6 +991,72 @@ class PdfgenTestCase(unittest.TestCase):
             x += canv._pagesize[0]*0.5
         canv.showPage()
         canv.save()
+
+    def test4(self):
+        sc = colors.CMYKColorSep
+        rgb = ['red','green','blue', 'black']
+        cmykb = [(0,0,0,1)]
+        cmyk = [(1,0,0,0),(0,1,0,0),(0,0,1,0)]+cmykb
+        seps = [sc(1,1,0,0,spotName='sep0'),sc(0,1,1,0,spotName='sep1')]
+        sepb = [sc(0,0,0,1,spotName='sepb')]
+        #these should all work
+        trySomeColors(rgb+cmyk+seps)
+        trySomeColors(rgb,'rgb')
+        trySomeColors(cmyk,'cmyk')
+        trySomeColors(seps+cmyk,'sep_cmyk')
+        trySomeColors(seps+sepb,'sep')  #we need a fake black for now
+        trySomeColors(seps+['black']+cmykb,'sep_black')
+        self.assertRaises(ValueError,trySomeColors,rgb+cmyk+seps,'rgb')
+        self.assertRaises(ValueError,trySomeColors,rgb+cmyk,'rgb')
+        self.assertRaises(ValueError,trySomeColors,rgb+seps,'rgb')
+        trySomeColors(rgb+sepb,'rgb')   #should work because blacks are convertible 
+        trySomeColors(rgb+cmykb,'rgb')
+        self.assertRaises(ValueError,trySomeColors,cmyk+rgb+seps,'cmyk')
+        trySomeColors(cmyk+['black']+seps,'cmyk')   #OK because black & seps are convertible
+
+    def test5(self):
+        from reportlab.lib.pagesizes import A4,LETTER
+        canv = canvas.Canvas(outputfile('test_pdfgen_general_page_sizes.pdf'),
+                        pagesize=A4,
+                        )
+        canv.setFont('Helvetica',10)
+        S = A4
+        canv.drawString(0,S[1]-10,'Top Left=(%s,%s) Page Size=%s x %s' % (0,S[1],S[0],S[1]))
+        canv.drawCentredString(0.5*S[0],0.5*S[1],'Center =(%s,%s) Page Size=%s x %s' % (0.5*S[0],0.5*S[1],S[0],S[1]))
+        canv.drawRightString(S[0],2,'Bottom Right=(%s,%s) Page Size=%s x %s' % (S[0],0,S[0],S[1]))
+        canv.showPage()
+        S = LETTER
+        canv.setPageSize(S)
+        canv.drawString(0,S[1]-10,'Top Left=(%s,%s) Page Size=%s x %s' % (0,S[1],S[0],S[1]))
+        canv.drawCentredString(0.5*S[0],0.5*S[1],'Center =(%s,%s) Page Size=%s x %s' % (0.5*S[0],0.5*S[1],S[0],S[1]))
+        canv.drawRightString(S[0],2,'Bottom Right=(%s,%s) Page Size=%s x %s' % (S[0],0,S[0],S[1]))
+        canv.showPage()
+        S = A4
+        canv.setPageSize(S)
+        canv.setPageRotation(180)
+        canv.drawString(0,S[1]-10,'Top Left=(%s,%s) Page Size=%s x %s' % (0,S[1],S[0],S[1]))
+        canv.drawCentredString(0.5*S[0],0.5*S[1],'Center =(%s,%s) Page Size=%s x %s' % (0.5*S[0],0.5*S[1],S[0],S[1]))
+        canv.drawRightString(S[0],2,'Bottom Right=(%s,%s) Page Size=%s x %s' % (S[0],0,S[0],S[1]))
+        canv.showPage()
+        canv.save()
+
+def trySomeColors(C,enforceColorSpace=None):
+    from StringIO import StringIO
+    out=StringIO()
+    canv = canvas.Canvas(out,enforceColorSpace=enforceColorSpace)
+    canv.setFont('Helvetica',10)
+    x = 0
+    y = 0
+    w,h = canv._pagesize
+    for c in C:
+        if y+10>h:
+            y = 0
+            x += 10
+        canv.setFillColor(c)
+        canv.rect(x,y,10,10,fill=1,stroke=0)
+        y += 10
+    canv.showPage()
+    canv.save()
 
 def makeSuite():
     return makeSuiteForClasses(PdfgenTestCase)

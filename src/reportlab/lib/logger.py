@@ -35,7 +35,7 @@ class Logger:
     def write(self,text):
         '''write text to all the destinations'''
         if text[-1]!='\n': text=text+'\n'
-        map(lambda fp,t=text: fp.write(t),self._fps)
+        for fp in self._fps: fp.write(text)
 
     def __call__(self,text):
         self.write(text)
@@ -50,7 +50,7 @@ class WarnOnce:
         self.enabled = 1
 
     def once(self,warning):
-        if not self.uttered.has_key(warning):
+        if warning not in self.uttered:
             if self.enabled: logger.write(self.pfx + warning)
             self.uttered[warning] = 1
 
