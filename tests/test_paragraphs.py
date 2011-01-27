@@ -165,9 +165,9 @@ class ParagraphTestCase(unittest.TestCase):
             onFirstPage=myFirstPage, onLaterPages=myLaterPages)
     
     def testBidi(self):
+        from reportlab.pdfbase import ttfonts
         def registerFont(filename):
             from reportlab.pdfbase import pdfmetrics
-            from reportlab.pdfbase import ttfonts
             from reportlab.lib.fonts import addMapping
         
             face = ttfonts.TTFontFace(filename)
@@ -178,7 +178,10 @@ class ParagraphTestCase(unittest.TestCase):
         import os
         fontDir = 'ttf-dejavu'
         fontName = 'DejaVuSans'
-        registerFont(os.path.join('/usr/share/fonts/truetype/', fontDir, fontName + '.ttf'))
+        try:
+            registerFont(os.path.join('/usr/share/fonts/truetype/', fontDir, fontName + '.ttf'))
+        except ttfonts.TTFError:
+            registerFont(os.path.join(fontDir, fontName + '.ttf'))
 
         # create styles based on the registered font
         from reportlab.lib.enums import TA_LEFT, TA_RIGHT
