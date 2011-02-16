@@ -279,6 +279,111 @@ class ParagraphTestCase(unittest.TestCase):
         template = SimpleDocTemplate(outputfile('test_paragraphs_bidi.pdf'))
         template.build(story)
 
+    def testRTLBullets(self):
+        try:
+            import mwlib.ext
+        except ImportError:
+            pass
+
+        import os
+        from reportlab.platypus import SimpleDocTemplate
+        from reportlab.platypus.paragraph import Paragraph
+        from reportlab.platypus.flowables import Spacer
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase import ttfonts
+        from reportlab.lib.fonts import addMapping
+        from reportlab.lib.enums import TA_JUSTIFY, TA_RIGHT
+
+        # register a font that supports most Unicode characters
+        if 1:
+            fontDir = 'ttf-dejavu'
+            font_name = 'DejaVuSans'
+            font_info = [(font_name, 0, 0, font_name),
+                         (font_name, 1, 0, font_name + '-Bold'),
+                         (font_name, 0, 1, font_name + '-Oblique'),
+                         (font_name, 1, 1, font_name + '-BoldOblique'),
+                         ]
+            for font in font_info:
+                fontName = font[3]
+                try:
+                    pdfmetrics.registerFont(ttfonts.TTFont(fontName,os.path.join('/usr/share/fonts/truetype/', fontDir, fontName + '.ttf')))
+                except ttfonts.TTFError:
+                    pdfmetrics.registerFont(ttfonts.TTFont(fontName,os.path.join(fontDir, fontName + '.ttf')))
+                addMapping(*font)
+        else:
+            font_dir = '/usr/share/fonts/truetype/freefont/'
+            font_name = 'FreeSerif'
+            font_info = [(font_name, 0, 0, font_name),
+                         (font_name, 1, 0, font_name + 'Bold'),
+                         (font_name, 0, 1, font_name + 'Italic'),
+                         (font_name, 1, 1, font_name + 'BoldItalic'),
+                         ]
+            for font in font_info:
+                pdfmetrics.registerFont(ttfonts.TTFont(font[3], os.path.join(font_dir, '%s.ttf' % font[3])))
+                addMapping(*font)
+        # done registering fonts
+
+
+        doc = SimpleDocTemplate(outputfile('test_rtl_bullets.pdf'),showBoundary=True)
+        p_style = ParagraphStyle('default')
+        p_style.leftIndent = 0
+        p_style.rightIndent = 0
+
+        list_styles=[ParagraphStyle('list%d' % n) for n in range(3)]
+        all_styles = list_styles[:]
+        all_styles.append(p_style)
+
+        direction='rtl'
+
+        for s in all_styles:
+            s.fontSize = 15
+            s.leading = s.fontSize*1.2
+            s.fontName = font_name
+            if direction=='rtl':
+                s.wordWrap = 'RTL'
+                s.alignment = TA_RIGHT
+            else:
+                s.alignment = TA_JUSTIFY
+
+        indent_amount = 20
+
+        for list_lvl, list_style in enumerate(list_styles):
+            list_lvl += 1
+            list_style.bulletIndent = indent_amount*(list_lvl-1)
+
+            if direction=='rtl':
+                list_style.rightIndent = indent_amount*list_lvl
+            else:
+                list_style.leftIndent = indent_amount*list_lvl
+
+
+        elements =[]
+
+        TEXTS=[
+                '\xd7\xa9\xd7\xa8 \xd7\x94\xd7\x91\xd7\x99\xd7\x98\xd7\x97\xd7\x95\xd7\x9f, \xd7\x94\xd7\x95\xd7\x90 \xd7\x94\xd7\xa9\xd7\xa8 \xd7\x94\xd7\x90\xd7\x97\xd7\xa8\xd7\x90\xd7\x99 \xd7\xa2\xd7\x9c \xd7\x9e\xd7\xa9\xd7\xa8\xd7\x93 \xd7\x96\xd7\x94. \xd7\xaa\xd7\xa4\xd7\xa7\xd7\x99\xd7\x93 \xd7\x96\xd7\x94 \xd7\xa0\xd7\x97\xd7\xa9\xd7\x91 \xd7\x9c\xd7\x90\xd7\x97\xd7\x93 \xd7\x94\xd7\xaa\xd7\xa4\xd7\xa7\xd7\x99\xd7\x93\xd7\x99\xd7\x9d \xd7\x94\xd7\x91\xd7\x9b\xd7\x99\xd7\xa8\xd7\x99\xd7\x9d \xd7\x91\xd7\x9e\xd7\x9e\xd7\xa9\xd7\x9c\xd7\x94. \xd7\x9c\xd7\xa9\xd7\xa8 \xd7\x94\xd7\x91\xd7\x99\xd7\x98\xd7\x97\xd7\x95\xd7\x9f \xd7\x9e\xd7\xaa\xd7\x9e\xd7\xa0\xd7\x94 \xd7\x9c\xd7\xa8\xd7\x95\xd7\x91 \xd7\x92\xd7\x9d \xd7\xa1\xd7\x92\xd7\x9f \xd7\xa9\xd7\xa8.',
+                '\xd7\xa9\xd7\xa8 \xd7\x94\xd7\x91\xd7\x99\xd7\x98\xd7\x97\xd7\x95\xd7\x9f, <b>\xd7\x94\xd7\x95\xd7\x90 \xd7\x94\xd7\xa9\xd7\xa8 \xd7\x94\xd7\x90\xd7\x97\xd7\xa8\xd7\x90\xd7\x99 \xd7\xa2\xd7\x9c \xd7\x9e\xd7\xa9\xd7\xa8\xd7\x93 \xd7\x96\xd7\x94.</b> \xd7\xaa\xd7\xa4\xd7\xa7\xd7\x99\xd7\x93 \xd7\x96\xd7\x94 <i>\xd7\xa0\xd7\x97\xd7\xa9\xd7\x91 \xd7\x9c\xd7\x90\xd7\x97\xd7\x93</i> \xd7\x94\xd7\xaa\xd7\xa4\xd7\xa7\xd7\x99\xd7\x93\xd7\x99\xd7\x9d <b><i>\xd7\x94\xd7\x91\xd7\x9b\xd7\x99\xd7\xa8\xd7\x99\xd7\x9d \xd7\x91\xd7\x9e\xd7\x9e\xd7\xa9\xd7\x9c\xd7\x94</b></i>. \xd7\x9c\xd7\xa9\xd7\xa8 \xd7\x94\xd7\x91\xd7\x99\xd7\x98\xd7\x97\xd7\x95\xd7\x9f \xd7\x9e\xd7\xaa\xd7\x9e\xd7\xa0\xd7\x94 \xd7\x9c\xd7\xa8\xd7\x95\xd7\x91 \xd7\x92\xd7\x9d \xd7\xa1\xd7\x92\xd7\x9f \xd7\xa9\xd7\xa8.',
+                u'<bullet>\u2022</bullet>\u05e9\u05e8 \u05d4\u05d1\u05d9\u05d8\u05d7\u05d5\u05df, <b>\u05d4\u05d5\u05d0 \u05d4\u05e9\u05e8 \u05d4\u05d0\u05d7\u05e8\u05d0\u05d9 \u05e2\u05dc \u05de\u05e9\u05e8\u05d3 \u05d6\u05d4.</b> \u05ea\u05e4\u05e7\u05d9\u05d3 \u05d6\u05d4 <i>\u05e0\u05d7\u05e9\u05d1 \u05dc\u05d0\u05d7\u05d3</i> \u05d4\u05ea\u05e4\u05e7\u05d9\u05d3\u05d9\u05dd <b><i>\u05d4\u05d1\u05db\u05d9\u05e8\u05d9\u05dd \u05d1\u05de\u05de\u05e9\u05dc\u05d4</b></i>. \u05dc\u05e9\u05e8\u05d4\u05d1\u05d9\u05d8\u05d7\u05d5\u05df \u05de\u05ea\u05de\u05e0\u05d4 \u05dc\u05e8\u05d5\u05d1 \u05d2\u05dd \u05e1\u05d2\u05df \u05e9\u05e8.',
+                ]
+
+        # simple text in a paragraph
+        # working with patch from Hosam Aly
+        p = Paragraph(TEXTS[0], p_style)
+        elements.append(p)
+
+        elements.append(Spacer(0, 40))
+
+        # uses intra paragraph markup -> style text
+        p = Paragraph(TEXTS[1], p_style)
+        elements.append(p)
+        elements.append(Spacer(0, 40))
+
+        # list item (just a paragraph with a leading <bullet> element
+        for list_style in list_styles:
+            p = Paragraph(TEXTS[2], list_style)
+            elements.append(p)
+
+        doc.build(elements)
 
 def makeSuite():
     return makeSuiteForClasses(ParagraphTestCase)
