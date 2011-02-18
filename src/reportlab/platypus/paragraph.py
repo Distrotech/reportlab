@@ -23,7 +23,7 @@ import re
 #on UTF8 branch, split and strip must be unicode-safe!
 #thanks to Dirk Holtwick for helpful discussions/insight
 #on this one
-_wsc_re_split=re.compile('[%s]+'% re.escape(''.join((
+_wsc = ''.join((
     u'\u0009',  # HORIZONTAL TABULATION
     u'\u000A',  # LINE FEED
     u'\u000B',  # VERTICAL TABULATION
@@ -54,7 +54,8 @@ _wsc_re_split=re.compile('[%s]+'% re.escape(''.join((
     u'\u202F',  # NARROW NO-BREAK SPACE
     u'\u205F',  # MEDIUM MATHEMATICAL SPACE
     u'\u3000',  # IDEOGRAPHIC SPACE
-    )))).split
+    ))
+_wsc_re_split=re.compile('[%s]+'% re.escape(_wsc)).split
 
 def split(text, delim=None):
     if type(text) is str: text = text.decode('utf8')
@@ -65,7 +66,7 @@ def split(text, delim=None):
 
 def strip(text):
     if type(text) is str: text = text.decode('utf8')
-    return text.strip().encode('utf8')
+    return text.strip(_wsc).encode('utf8')
 
 class ParaLines(ABag):
     """
@@ -774,14 +775,16 @@ def cjkFragSplit(frags, maxWidths, calcBounds, encoding='utf8'):
         if endLine:
             extraSpace = maxWidth - widthUsed
             if not lineBreak:
-                #This is the most important of the Japanese typography rules.
-                #if next character cannot start a line, wrap it up to this line so it hangs
+                #we are pushing this character back, but
+                #the most important of the Japanese typography rules
+                #if this character cannot start a line, wrap it up to this line so it hangs
                 #in the right margin. We won't do two or more though - that's unlikely and
                 #would result in growing ugliness.
-                #otherwise we need to push the character back
                 #and increase the extra space
                 #bug fix contributed by Alexander Vasilenko <alexs.vasilenko@gmail.com>
-                if u not in ALL_CANNOT_START:
+                if u not in ALL_CANNOT_START and i>lineStartPos+1:
+                    #otherwise we need to push the character back
+                    #the i>lineStart+1 condition ensures progress
                     i -= 1
                     extraSpace += w
             lines.append(makeCJKParaLine(U[lineStartPos:i],extraSpace,calcBounds))
@@ -1076,7 +1079,18 @@ class Paragraph(Flowable):
             fontSize = f.fontSize
             fontName = f.fontName
             ascent, descent = getAscentDescent(fontName,fontSize)
-            words = hasattr(f,'text') and split(f.text, ' ') or f.words
+            if hasattr(f,'text'):
+                text = strip(f.text)
+                if not text:
+                    return f.clone(kind=0, lines=[],ascent=ascent,descent=descent,fontSize=fontSize)
+                else:
+                    words = split(text)
+            else:
+                words = f.words
+                for w in words:
+                    if strip(w): break
+                else:
+                    return f.clone(kind=0, lines=[],ascent=ascent,descent=descent,fontSize=fontSize)
             spaceWidth = stringWidth(' ', fontName, fontSize, self.encoding)
             cLine = []
             currentWidth = -spaceWidth   # hack to get around extra space for word 1
@@ -1270,12 +1284,11 @@ class Paragraph(Flowable):
 
         return lines
 
-    def breakLinesCJK(self, width):
+    def breakLinesCJK(self, maxWidths):
         """Initially, the dumbest possible wrapping algorithm.
         Cannot handle font variations."""
 
-        if not isinstance(width,(list,tuple)): maxWidths = [width]
-        else: maxWidths = width
+        if not isinstance(maxWidths,(list,tuple)): maxWidths = [maxWidths]
         style = self.style
         self.height = 0
 
@@ -1296,7 +1309,7 @@ class Paragraph(Flowable):
                 text = ''.join(getattr(f,'words',[]))
 
             from reportlab.lib.textsplit import wordSplit
-            lines = wordSplit(text, maxWidths[0], f.fontName, f.fontSize)
+            lines = wordSplit(text, maxWidths, f.fontName, f.fontSize)
             #the paragraph drawing routine assumes multiple frags per line, so we need an
             #extra list like this
             #  [space, [text]]
