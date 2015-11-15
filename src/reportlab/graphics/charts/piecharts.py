@@ -667,11 +667,12 @@ class Pie(AbstractPieChart):
         data = list(map(abs,self.data))
         s = self._sum = float(sum(data))
         if s<=1e-8: s = 0
-        f = 360./s
-        if keepData:
-            return [AngleData(f*x,x) for x in data]
-        else:
-            return [f*x for x in data]
+        if s != 0:
+            f = 360./s
+            if keepData:
+                return [AngleData(f*x,x) for x in data]
+            else:
+                return [f*x for x in data]
 
     def makeAngles(self):
         wr = getattr(self,'wedgeRecord',None)
