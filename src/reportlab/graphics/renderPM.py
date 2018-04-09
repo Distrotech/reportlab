@@ -638,6 +638,8 @@ class PMCanvas:
 
 def drawToPMCanvas(d, dpi=72, bg=0xffffff, configPIL=None, showBoundary=rl_config._unset_):
     d = renderScaledDrawing(d)
+    scale = dpi/72.0
+    d.scale(scale,scale)
     c = PMCanvas(d.width, d.height, dpi=dpi, bg=bg, configPIL=configPIL)
     draw(d, c, 0, 0, showBoundary=showBoundary)
     return c
