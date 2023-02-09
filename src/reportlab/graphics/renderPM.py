@@ -44,7 +44,7 @@ def Color2Hex(c):
     return c
 
 # the main entry point for users...
-def draw(drawing, canvas, x, y, showBoundary=rl_config._unset_):
+def draw(drawing, canvas, x, y, showBoundary=rl_config._unset_) -> None:
     """As it says"""
     R = _PMRenderer()
     R.draw(renderScaledDrawing(drawing), canvas, x, y, showBoundary=showBoundary)
